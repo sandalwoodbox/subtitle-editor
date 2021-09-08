@@ -116,7 +116,8 @@ def modify_sub(subtitle, video):
 @click.command()
 @click.argument("srt_in", type=click.File("r"))
 @click.argument("video", type=click.Path(exists=True))
-def modify_subs(srt_in, video):
+@click.option("-o", "--output", "srt_out", required=True, type=click.File("w"))
+def modify_subs(srt_in, video, srt_out):
     try:
         subtitles = list(srt.parse(srt_in))
     except srt.SRTParseError:
@@ -127,7 +128,7 @@ def modify_subs(srt_in, video):
             for i, line in enumerate(srt_in)
         ]
 
-    last_end = timedelta(0)
+    last_end = timedelta(0) - ONE_FRAME
     for subtitle in subtitles:
         if subtitle.start == UNSET_TIME:
             subtitle.start = last_end + ONE_FRAME
@@ -136,7 +137,7 @@ def modify_subs(srt_in, video):
         if done:
             break
         last_end = subtitle.end
-    click.echo(srt.compose(subtitles))
+    srt_out.write(srt.compose(subtitles))
 
 
 if __name__ == "__main__":
