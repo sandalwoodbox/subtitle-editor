@@ -23,6 +23,7 @@ q Abort without outputting results
 
 ONE_FRAME = timedelta(milliseconds=40)
 SELECTED_STYLE = {"fg": "black", "bg": "white"}
+UNSET_TIME = timedelta(-1)
 
 
 def play(start, end, video):
@@ -86,7 +87,7 @@ def modify_sub(subtitle, video):
             click.echo(f"{message}\n")
             message = None
 
-        click.echo("Enter p, s/e, +/-, n, q, ?")
+        click.echo("Enter p, s/e, +/-, n, d, q, ?")
         cmd = click.getchar()
         if cmd == "?":
             click.echo(MODIFY_HELP)
@@ -116,11 +117,25 @@ def modify_sub(subtitle, video):
 @click.argument("srt_in", type=click.File("r"))
 @click.argument("video", type=click.Path(exists=True))
 def modify_subs(srt_in, video):
-    subtitles = srt.parse(srt_in)
+    try:
+        subtitles = list(srt.parse(srt_in))
+    except srt.SRTParseError:
+        # Assume each line is a subtitle that needs a time associated
+        srt_in.seek(0)
+        subtitles = [
+            srt.Subtitle(i + 1, UNSET_TIME, UNSET_TIME, line)
+            for i, line in enumerate(srt_in)
+        ]
+
+    last_end = timedelta(0)
     for subtitle in subtitles:
+        if subtitle.start == UNSET_TIME:
+            subtitle.start = last_end + ONE_FRAME
+            subtitle.end = subtitle.start + (ONE_FRAME * 25)
         done = modify_sub(subtitle, video)
         if done:
             break
+        last_end = subtitle.end
     click.echo(srt.compose(subtitles))
 
 
