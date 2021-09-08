@@ -6,6 +6,8 @@ from datetime import timedelta
 import click
 import ffmpeg
 import srt
+import vlc
+from video_to_ascii.video_engine import VideoEngine
 
 MODIFY_HELP = """
 p Play the video between the start/end timestamps
@@ -29,16 +31,34 @@ def play(start, end, video):
         "ss": start.total_seconds(),
         "t": (end - start).total_seconds(),
     }
-    clip_filename = (
-        f'{filename}-{input_kwargs["ss"]}-{input_kwargs["t"]}.{file_extension}'
+    temp_dir = tempfile.gettempdir()
+
+    # Set up video clip
+    clip_filename = os.path.join(
+        temp_dir,
+        "subtitle-editor",
+        f'{filename}-{input_kwargs["ss"]}-{input_kwargs["t"]}{file_extension}',
     )
     if not os.path.exists(clip_filename):
-        temp_dir = tempfile.gettempdir()
         stream = ffmpeg.input(video, **input_kwargs)
         stream = ffmpeg.output(stream, clip_filename, c="copy")
         stream = ffmpeg.overwrite_output(stream)
         ffmpeg.run(stream)
-    click.launch(clip_filename)
+
+    engine = VideoEngine()
+    engine.load_video_from_file(clip_filename)
+
+    # Set up audio clip
+    audio_filename = os.path.join(
+        temp_dir,
+        "temp-audiofile-for-vta.wav",
+    )
+    stream = ffmpeg.input(video, **input_kwargs)
+    stream = ffmpeg.output(stream, audio_filename)
+    stream = ffmpeg.overwrite_output(stream)
+    ffmpeg.run(stream)
+    engine.with_audio = True
+    engine.play()
 
 
 def modify_sub(subtitle, video):

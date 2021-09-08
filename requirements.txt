@@ -1,3 +1,7 @@
-srt==3.4.1
-ffmpeg-python==0.2.0
 click==7.1.2
+ffmpeg-python==0.2.0
+opencv-python==4.5.3.56
+PyAudio==0.2.11
+python-vlc==3.0.12118
+srt==3.4.1
+video-to-ascii==1.2.8
