@@ -1,15 +1,12 @@
 import curses
-import os
-import sys
-import tempfile
 
 import click
-import ffmpeg
 import srt
-from video_to_ascii.video_engine import VideoEngine
 
+from .colors import Pairs, setup_colors
 from .constants import ONE_FRAME, ONE_SECOND, UNSET_TIME
 from .subtitles.srt import SubtitlePad
+from .video import VideoWindow, play
 
 MODIFY_HELP = """
 p     Play the video between the start/end timestamps
@@ -23,83 +20,58 @@ q     Abort without outputting results
 ?     Display this message
 """
 
-INTERFACE_STYLE = 1
-
-
-def play(start, end, video):
-    filename, file_extension = os.path.splitext(video)
-    input_kwargs = {
-        "ss": start.total_seconds(),
-        "t": (end - start).total_seconds(),
-    }
-    temp_dir = tempfile.gettempdir()
-
-    # Set up video clip
-    clip_filename = os.path.join(
-        temp_dir,
-        "subtitle-editor",
-        f'{filename}-{input_kwargs["ss"]}-{input_kwargs["t"]}{file_extension}',
-    )
-    if not os.path.exists(clip_filename):
-        stream = ffmpeg.input(video, **input_kwargs)
-        stream = ffmpeg.output(stream, clip_filename, c="copy")
-        stream = ffmpeg.overwrite_output(stream)
-        ffmpeg.run(stream)
-
-    engine = VideoEngine()
-    engine.load_video_from_file(clip_filename)
-
-    # Set up audio clip
-    audio_filename = os.path.join(
-        temp_dir,
-        "temp-audiofile-for-vta.wav",
-    )
-    stream = ffmpeg.input(video, **input_kwargs)
-    stream = ffmpeg.output(stream, audio_filename)
-    stream = ffmpeg.overwrite_output(stream)
-    ffmpeg.run(stream)
-    engine.with_audio = True
-    engine.play()
-    os.remove(clip_filename)
-
 
 def run_editor(stdscr, subtitles, video):
     curses.curs_set(0)
-    curses.init_pair(INTERFACE_STYLE, curses.COLOR_WHITE, curses.COLOR_BLUE)
+
+    # Set up ANSI colors
+    setup_colors()
+
     stdscr.addstr(
         curses.LINES - 1,
         0,
         "Enter p, <tab>, +/-, n, d, q, ?".ljust(curses.COLS - 1),
-        curses.color_pair(INTERFACE_STYLE),
+        curses.color_pair(Pairs.STATUS),
     )
 
-    pad = SubtitlePad(subtitles)
+    video_window = VideoWindow(video, 0)
+    subtitle_pad = SubtitlePad(
+        subtitles, video_window.window.getmaxyx()[0] + 1, curses.LINES - 2
+    )
+
+    video_window.set_timestamps(subtitle_pad.get_timestamps())
 
     cmd = None
 
     while cmd != "q":
         stdscr.refresh()
-        pad.render()
-        pad.refresh()
+        subtitle_pad.render()
+        subtitle_pad.refresh()
+        video_window.render()
+        video_window.refresh()
         cmd = stdscr.getkey()
         if cmd == "?":
             message = MODIFY_HELP
         elif cmd == "KEY_UP":
-            pad.previous()
+            subtitle_pad.previous()
         elif cmd == "KEY_DOWN":
-            pad.next()
-        elif cmd == "\t":
-            pad.toggle_selected_timestamp()
+            subtitle_pad.next()
+        elif cmd in ("\t", "KEY_LEFT", "KEY_RIGHT"):
+            subtitle_pad.toggle_selected_timestamp()
         elif cmd == "=":
-            pad.adjust_timestamp(ONE_FRAME)
+            subtitle_pad.adjust_timestamp(ONE_FRAME)
+            video_window.set_timestamps(subtitle_pad.get_timestamps())
         elif cmd == "+":
-            pad.adjust_timestamp(ONE_SECOND)
+            subtitle_pad.adjust_timestamp(ONE_SECOND)
+            video_window.set_timestamps(subtitle_pad.get_timestamps())
         elif cmd == "-":
-            pad.adjust_timestamp(-1 * ONE_FRAME)
+            subtitle_pad.adjust_timestamp(-1 * ONE_FRAME)
+            video_window.set_timestamps(subtitle_pad.get_timestamps())
         elif cmd == "_":
-            pad.adjust_timestamp(-1 * ONE_SECOND)
+            subtitle_pad.adjust_timestamp(-1 * ONE_SECOND)
+            video_window.set_timestamps(subtitle_pad.get_timestamps())
         elif cmd == "p":
-            start, end = pad.get_timestamps()
+            start, end = subtitle_pad.get_timestamps()
             play(start, end, video)
         else:
             message = f"Unknown command: {cmd}"

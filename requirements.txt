@@ -1,6 +1,9 @@
+black==21.9b0
 click==7.1.2
 ffmpeg-python==0.2.0
+isort==5.9.3
 opencv-python==4.5.3.56
 PyAudio==0.2.11
+pytest==6.2.5
 srt==3.4.1
 video-to-ascii==1.2.8

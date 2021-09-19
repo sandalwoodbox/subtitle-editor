@@ -59,16 +59,18 @@ class SubtitleEntry:
 
 
 class SubtitlePad:
-    def __init__(self, subtitles):
+    def __init__(self, subtitles, window_start_line, window_end_line):
         self.wrapper = TextWrapper(width=self.ncols())
         self.subtitles = [SubtitleEntry(s, self.wrapper) for s in subtitles]
         self.selected_subtitle = 0
         self.selected_timestamp = "start"
         self.pad = curses.newpad(self.nlines(), self.ncols())
 
+        self.window_start_line = window_start_line
+        self.window_end_line = window_end_line
+        self.displayed_lines = window_end_line - window_start_line
         self.start_line = 0
-        self.end_line = curses.LINES - 2
-        self.displayed_lines = self.end_line
+        self.end_line = self.displayed_lines
 
     def nlines(self):
         # The total number of lines is:
@@ -104,7 +106,14 @@ class SubtitlePad:
         elif selected_end > self.end_line:
             self.end_line = selected_end
             self.start_line = selected_end - self.displayed_lines
-        self.pad.refresh(self.start_line, 0, 0, 0, curses.LINES - 2, self.ncols() - 1)
+        self.pad.refresh(
+            self.start_line,
+            0,
+            self.window_start_line,
+            0,
+            self.window_end_line,
+            self.ncols() - 5,
+        )
 
     def previous(self):
         if self.selected_subtitle > 0:
