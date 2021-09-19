@@ -210,7 +210,7 @@ class VideoWindow:
                     )
                 except curses.error:
                     raise Exception(
-                        f"Unable to print pixel `{char}` at y={y} x={x} (color pair {pair_number}; maxyx={self.window.getmaxyx()})"
+                        f"Unable to print pixel `{chr(char)}` at y={y} x={x} (color pair {pair_number}; maxyx={self.window.getmaxyx()})"
                     )
 
     def render(self):
@@ -219,12 +219,20 @@ class VideoWindow:
 
         self.window.clear()
 
-        curses_frame = self.get_curses_frame(
+        start_frame = self.get_curses_frame(
             math.floor(self.start_ts.total_seconds() * self.fps),
             # Crop video to half width for display
-            # self.video_width // 2,
+            self.video_width // 2,
         )
-        self.render_frame(curses_frame, 0, 0)
+        self.render_frame(start_frame, 0, 0)
+        end_frame = self.get_curses_frame(
+            math.floor(self.end_ts.total_seconds() * self.fps),
+            # Crop video to half width for display
+            self.video_width // 2,
+        )
+        # start_x is half the video width, but multiplied by two
+        # because pixels are 2 cols wide (so it cancels out to just video_width)
+        self.render_frame(end_frame, self.video_width, 0)
 
         self.window.noutrefresh()
         self.should_render = False
