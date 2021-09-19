@@ -3,17 +3,18 @@ import math
 import numpy
 import os
 import tempfile
-from textwrap import TextWrapper
+import time
 
 import cv2
 import ffmpeg
+import pyaudio
+import wave
 from video_to_ascii.render_strategy.image_processor import (
     brightness_to_ascii,
     increase_saturation,
     rgb_to_brightness,
 )
 from video_to_ascii.render_strategy.ascii_strategy import AsciiStrategy
-from video_to_ascii.video_engine import VideoEngine
 
 from .colors import rgb_to_color_pair
 
@@ -84,50 +85,14 @@ def frame_to_curses(frame):
     curses_frame = numpy.empty((height, width, 2), dtype=numpy.int16)
     for y, row in enumerate(frame):
         for x, pixel in enumerate(row):
-            char, pair_number = pixel_to_ascii(pixel, colored=True, density=2)
+            char, pair_number = pixel_to_ascii(pixel, colored=True, density=1)
             curses_frame[y][x] = [ord(char[0]), pair_number]
     return curses_frame
 
 
-def play(start, end, video):
-    filename, file_extension = os.path.splitext(video)
-    input_kwargs = {
-        "ss": start.total_seconds(),
-        "t": (end - start).total_seconds(),
-    }
-    temp_dir = tempfile.gettempdir()
-
-    # Set up video clip
-    clip_filename = os.path.join(
-        temp_dir,
-        "subtitle-editor",
-        f'{filename}-{input_kwargs["ss"]}-{input_kwargs["t"]}{file_extension}',
-    )
-    if not os.path.exists(clip_filename):
-        stream = ffmpeg.input(video, **input_kwargs)
-        stream = ffmpeg.output(stream, clip_filename, c="copy")
-        stream = ffmpeg.overwrite_output(stream)
-        ffmpeg.run(stream)
-
-    engine = VideoEngine()
-    engine.load_video_from_file(clip_filename)
-
-    # Set up audio clip
-    audio_filename = os.path.join(
-        temp_dir,
-        "temp-audiofile-for-vta.wav",
-    )
-    stream = ffmpeg.input(video, **input_kwargs)
-    stream = ffmpeg.output(stream, audio_filename)
-    stream = ffmpeg.overwrite_output(stream)
-    ffmpeg.run(stream)
-    engine.with_audio = True
-    engine.play()
-    os.remove(clip_filename)
-
-
 class VideoWindow:
     def __init__(self, video, start_line):
+        self.video = video
         self.cap = cv2.VideoCapture(video)
         self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
@@ -147,7 +112,7 @@ class VideoWindow:
             self.video_height + 1,
             # Cols. Multiply by 2 to get cols from pixels.
             self.video_width * 2,
-            0,
+            start_line,
             0,
         )
         self.start_ts = None
@@ -236,6 +201,55 @@ class VideoWindow:
 
         self.window.noutrefresh()
         self.should_render = False
+
+    def play(self):
+        # Round to frames
+        start_frame_num = math.floor(self.start_ts.total_seconds() * self.fps)
+        end_frame_num = math.floor(self.end_ts.total_seconds() * self.fps)
+
+        start = start_frame_num / self.fps
+        end = end_frame_num / self.fps
+        input_kwargs = {
+            "ss": start,
+            "t": end - start,
+        }
+
+        # Set up audio clip
+        temp_dir = tempfile.gettempdir()
+        audio_filename = os.path.join(
+            temp_dir,
+            "temp-audiofile-for-vta.wav",
+        )
+        stream = ffmpeg.input(self.video, **input_kwargs)
+        stream = ffmpeg.output(stream, audio_filename)
+        stream = ffmpeg.overwrite_output(stream)
+        ffmpeg.run(stream, quiet=True)
+        wave_file = wave.open(audio_filename, "rb")
+        audio_chunk = int(wave_file.getframerate() / self.fps)
+        p = pyaudio.PyAudio()
+
+        audio_stream = p.open(
+            format=p.get_format_from_width(wave_file.getsampwidth()),
+            channels=wave_file.getnchannels(),
+            rate=wave_file.getframerate(),
+            output=True,
+        )
+
+        frame_delta = 1 / self.fps
+        for frame_num in range(start_frame_num, end_frame_num + 1):
+            t0 = time.process_time()
+            audio_data = wave_file.readframes(audio_chunk)
+            audio_stream.write(audio_data)
+            frame = self.get_curses_frame(frame_num)
+            self.render_frame(frame, 0, 0)
+            self.window.refresh()
+
+            t1 = time.process_time()
+            remaining = frame_delta - (t1 - t0)
+            if remaining > 0:
+                time.sleep(remaining)
+
+        self.should_render = True
 
     def refresh(self):
         self.window.refresh()

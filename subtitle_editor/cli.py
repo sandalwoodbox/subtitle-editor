@@ -6,7 +6,7 @@ import srt
 from .colors import Pairs, setup_colors
 from .constants import ONE_FRAME, ONE_SECOND, UNSET_TIME
 from .subtitles.srt import SubtitlePad
-from .video import VideoWindow, play
+from .video import VideoWindow
 
 MODIFY_HELP = """
 p     Play the video between the start/end timestamps
@@ -74,7 +74,8 @@ def run_editor(stdscr, subtitles, video):
             video_window.set_timestamps(subtitle_pad.get_timestamps())
         elif cmd == "p":
             start, end = subtitle_pad.get_timestamps()
-            play(start, end, video)
+            video_window.set_timestamps(subtitle_pad.get_timestamps())
+            video_window.play()
         else:
             message = f"Unknown command: {cmd}"
 
