@@ -134,9 +134,11 @@ class VideoWindow:
         )
         self.start = None
         self.end = None
+        self.should_render = True
 
     def set_timestamps(self, timestamps):
         self.start, self.end = timestamps
+        self.should_render = True
 
     def get_frame(self, td):
         self.cap.set(cv2.CAP_PROP_POS_MSEC, td.total_seconds() * 1000)
@@ -161,12 +163,18 @@ class VideoWindow:
                     )
 
     def render(self):
+        if not self.should_render:
+            return
+
         self.window.clear()
         start_frame = self.get_frame(self.start)
 
         # Width is cols / 2 because each "pixel" is 2 columns
         start_resized = resize_frame(start_frame, curses.COLS // 2, self.video_height)
         self.render_frame(start_resized, 0, 0)
+
+        self.window.noutrefresh()
+        self.should_render = False
 
     def refresh(self):
         self.window.refresh()

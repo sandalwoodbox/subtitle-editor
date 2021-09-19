@@ -44,18 +44,19 @@ def run_editor(stdscr, subtitles, video):
     cmd = None
 
     while cmd != "q":
-        stdscr.refresh()
+        stdscr.noutrefresh()
         subtitle_pad.render()
-        subtitle_pad.refresh()
         video_window.render()
-        video_window.refresh()
+        curses.doupdate()
         cmd = stdscr.getkey()
         if cmd == "?":
             message = MODIFY_HELP
         elif cmd == "KEY_UP":
             subtitle_pad.previous()
+            video_window.set_timestamps(subtitle_pad.get_timestamps())
         elif cmd == "KEY_DOWN":
             subtitle_pad.next()
+            video_window.set_timestamps(subtitle_pad.get_timestamps())
         elif cmd in ("\t", "KEY_LEFT", "KEY_RIGHT"):
             subtitle_pad.toggle_selected_timestamp()
         elif cmd == "=":

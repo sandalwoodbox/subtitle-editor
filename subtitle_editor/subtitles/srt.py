@@ -72,6 +72,8 @@ class SubtitlePad:
         self.start_line = 0
         self.end_line = self.displayed_lines
 
+        self.should_render = True
+
     def nlines(self):
         # The total number of lines is:
         # - number of lines for each subtitle
@@ -82,7 +84,12 @@ class SubtitlePad:
         return curses.COLS
 
     def render(self):
+        if not self.should_render:
+            return
+
         self.pad.clear()
+
+        # Redraw all subtitles
         start_line = 0
         for i, subtitle in enumerate(self.subtitles):
             subtitle.render(
@@ -93,7 +100,8 @@ class SubtitlePad:
             )
             start_line += subtitle.nlines() + 1
 
-    def refresh(self):
+        # Determine if we need to scroll the pad to get the selected
+        # subtitle in view.
         selected_start = (
             sum(s.nlines() for s in self.subtitles[: self.selected_subtitle])
             + self.selected_subtitle
@@ -106,7 +114,7 @@ class SubtitlePad:
         elif selected_end > self.end_line:
             self.end_line = selected_end
             self.start_line = selected_end - self.displayed_lines
-        self.pad.refresh(
+        self.pad.noutrefresh(
             self.start_line,
             0,
             self.window_start_line,
@@ -114,17 +122,25 @@ class SubtitlePad:
             self.window_end_line,
             self.ncols() - 5,
         )
+        self.should_render = False
 
     def previous(self):
-        if self.selected_subtitle > 0:
-            self.selected_subtitle -= 1
+        if self.selected_subtitle == 0:
+            return
+
+        self.selected_subtitle -= 1
+        self.should_render = True
 
     def next(self):
-        if self.selected_subtitle < len(self.subtitles) - 1:
-            self.selected_subtitle += 1
+        if self.selected_subtitle == len(self.subtitles) - 1:
+            return
+
+        self.selected_subtitle += 1
+        self.should_render = True
 
     def toggle_selected_timestamp(self):
         self.selected_timestamp = "start" if self.selected_timestamp == "end" else "end"
+        self.should_render = True
 
     def adjust_timestamp(self, timedelta):
         subtitle = self.subtitles[self.selected_subtitle]
@@ -132,6 +148,7 @@ class SubtitlePad:
             subtitle.adjust_start(timedelta)
         else:
             subtitle.adjust_end(timedelta)
+        self.should_render = True
 
     def get_timestamps(self):
         subtitle = self.subtitles[self.selected_subtitle]
