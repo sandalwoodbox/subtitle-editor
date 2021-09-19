@@ -1,5 +1,6 @@
 import curses
 import math
+import numpy
 import os
 import tempfile
 from textwrap import TextWrapper
@@ -71,6 +72,16 @@ def pixel_to_ascii(pixel, colored=True, density=0):
     return char * 2, pair_number
 
 
+def frame_to_curses(frame):
+    height, width, _ = frame.shape
+    curses_frame = numpy.empty((height, width, 2), dtype=numpy.int16)
+    for y, row in enumerate(frame):
+        for x, pixel in enumerate(row):
+            char, pair_number = pixel_to_ascii(pixel, colored=True, density=2)
+            curses_frame[y][x] = [ord(char[0]), pair_number]
+    return curses_frame
+
+
 def play(start, end, video):
     filename, file_extension = os.path.splitext(video)
     input_kwargs = {
@@ -136,27 +147,39 @@ class VideoWindow:
         self.end = None
         self.should_render = True
 
+        # Structure: {size: {frame_num: rendered_frame}}
+        self._cache = {}
+
     def set_timestamps(self, timestamps):
         self.start, self.end = timestamps
         self.should_render = True
 
-    def get_frame(self, td):
-        self.cap.set(cv2.CAP_PROP_POS_MSEC, td.total_seconds() * 1000)
-        _, frame = self.cap.read()
-        return frame
-
-    def render_frame(self, frame, start_x, start_y):
+    def get_curses_frame(self, frame_num, width, height):
         """
         Convert the frame (a numpy array) to ascii.
         """
-        for i, row in enumerate(frame):
-            for j, pixel in enumerate(row):
-                # Double the x offset because each "pixel" is 2 columns
-                x = start_x + j * 2
+        size = (width, height)
+        size_cache = self._cache.setdefault(size, {})
+
+        curses_frame = size_cache.get(frame_num)
+        if curses_frame is not None:
+            return curses_frame
+
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        _, frame = self.cap.read()
+        resized_frame = resize_frame(frame, width, height)
+        curses_frame = frame_to_curses(resized_frame)
+        size_cache[frame_num] = curses_frame
+        return curses_frame
+
+    def render_frame(self, curses_frame, start_x, start_y):
+        for i, row in enumerate(curses_frame):
+            for j, (char, pair_number) in enumerate(row):
                 y = start_y + i
-                char, pair_number = pixel_to_ascii(pixel, colored=True, density=2)
+                # Double x offset because 1 pixel = 2 cols
+                x = start_x + j * 2
                 try:
-                    self.window.addstr(y, x, char, curses.color_pair(pair_number))
+                    self.window.addstr(y, x, chr(char) * 2, curses.color_pair(pair_number))
                 except curses.error:
                     raise Exception(
                         f"Unable to print pixel `{char}` at y={y} x={x} (color pair {pair_number}; maxyx={self.window.getmaxyx()})"
@@ -167,11 +190,10 @@ class VideoWindow:
             return
 
         self.window.clear()
-        start_frame = self.get_frame(self.start)
 
         # Width is cols / 2 because each "pixel" is 2 columns
-        start_resized = resize_frame(start_frame, curses.COLS // 2, self.video_height)
-        self.render_frame(start_resized, 0, 0)
+        curses_frame = self.get_curses_frame(self.start.total_seconds() * self.fps, curses.COLS // 2, self.video_height)
+        self.render_frame(curses_frame, 0, 0)
 
         self.window.noutrefresh()
         self.should_render = False
