@@ -35,6 +35,7 @@ def run_editor(stdscr, subtitles, video):
     )
 
     video_window = VideoWindow(video, 0)
+    video_window.precache()
     subtitle_pad = SubtitlePad(
         subtitles, video_window.window.getmaxyx()[0] + 1, curses.LINES - 2
     )

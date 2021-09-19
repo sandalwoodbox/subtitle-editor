@@ -8,10 +8,17 @@ from textwrap import TextWrapper
 import cv2
 import ffmpeg
 from video_to_ascii.render_strategy.image_processor import (
-    brightness_to_ascii, increase_saturation, rgb_to_brightness)
+    brightness_to_ascii,
+    increase_saturation,
+    rgb_to_brightness,
+)
+from video_to_ascii.render_strategy.ascii_strategy import AsciiStrategy
 from video_to_ascii.video_engine import VideoEngine
 
 from .colors import rgb_to_color_pair
+
+
+ascii_strategy = AsciiStrategy()
 
 
 def calculate_frame_resize(frame_w, frame_h, target_w, target_h, crop=False):
@@ -130,47 +137,66 @@ class VideoWindow:
             frame_h=self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT),
             # Width is 1/2 COLS because each pixel is 2 columns
             target_w=curses.COLS // 2,
-            # Leave at least half the screen for the rest of the interface
-            target_h=curses.LINES // 2,
+            # Leave at least 1/4 the screen for the rest of the interface
+            target_h=curses.LINES * 3 // 4,
             crop=False,
         )
 
         self.window = curses.newwin(
-            # Add an extra line of buffer
+            # Lines. Add an extra line of buffer.
             self.video_height + 1,
-            # Multiply by 2 because this is cols, not pixels
+            # Cols. Multiply by 2 to get cols from pixels.
             self.video_width * 2,
             0,
             0,
         )
-        self.start = None
-        self.end = None
+        self.start_ts = None
+        self.end_ts = None
         self.should_render = True
 
-        # Structure: {size: {frame_num: rendered_frame}}
-        self._cache = {}
+        # Structure: {frame_num: rendered_frame}
+        self._cache = {frame_num: None for frame_num in range(self.frame_count)}
+
+    def precache(self):
+        self.window.clear()
+        self.window.addstr(0, 0, f"Caching rendered frames...")
+        self.window.addstr(1, 0, ascii_strategy.build_progress(0, self.frame_count))
+        self.window.refresh()
+        frame_num = 0
+        width, height = self.video_width, self.video_height
+
+        while self.cap.isOpened():
+            _, frame = self.cap.read()
+            if frame is None:
+                break
+
+            resized_frame = resize_frame(frame, width, height)
+            curses_frame = frame_to_curses(resized_frame)
+            self._cache[frame_num] = curses_frame
+            self.window.addstr(
+                1, 0, ascii_strategy.build_progress(frame_num, self.frame_count)
+            )
+            self.window.refresh()
+            frame_num += 1
 
     def set_timestamps(self, timestamps):
-        self.start, self.end = timestamps
+        self.start_ts, self.end_ts = timestamps
         self.should_render = True
 
-    def get_curses_frame(self, frame_num, width, height):
+    def get_curses_frame(self, frame_num, crop_w=None, crop_h=None):
         """
-        Convert the frame (a numpy array) to ascii.
+        Get a cached curses frame and center-crop it to the given dimensions
         """
-        size = (width, height)
-        size_cache = self._cache.setdefault(size, {})
 
-        curses_frame = size_cache.get(frame_num)
-        if curses_frame is not None:
-            return curses_frame
-
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-        _, frame = self.cap.read()
-        resized_frame = resize_frame(frame, width, height)
-        curses_frame = frame_to_curses(resized_frame)
-        size_cache[frame_num] = curses_frame
-        return curses_frame
+        curses_frame = self._cache[frame_num]
+        frame_h, frame_w, _ = curses_frame.shape
+        if crop_w is None:
+            crop_w = frame_w
+        if crop_h is None:
+            crop_h = frame_h
+        crop_x = (frame_w - crop_w) // 2
+        crop_y = (frame_h - crop_h) // 2
+        return curses_frame[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
 
     def render_frame(self, curses_frame, start_x, start_y):
         for i, row in enumerate(curses_frame):
@@ -179,7 +205,9 @@ class VideoWindow:
                 # Double x offset because 1 pixel = 2 cols
                 x = start_x + j * 2
                 try:
-                    self.window.addstr(y, x, chr(char) * 2, curses.color_pair(pair_number))
+                    self.window.addstr(
+                        y, x, chr(char) * 2, curses.color_pair(pair_number)
+                    )
                 except curses.error:
                     raise Exception(
                         f"Unable to print pixel `{char}` at y={y} x={x} (color pair {pair_number}; maxyx={self.window.getmaxyx()})"
@@ -191,8 +219,11 @@ class VideoWindow:
 
         self.window.clear()
 
-        # Width is cols / 2 because each "pixel" is 2 columns
-        curses_frame = self.get_curses_frame(self.start.total_seconds() * self.fps, curses.COLS // 2, self.video_height)
+        curses_frame = self.get_curses_frame(
+            math.floor(self.start_ts.total_seconds() * self.fps),
+            # Crop video to half width for display
+            # self.video_width // 2,
+        )
         self.render_frame(curses_frame, 0, 0)
 
         self.window.noutrefresh()
