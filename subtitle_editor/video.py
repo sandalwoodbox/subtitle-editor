@@ -1,24 +1,20 @@
 import curses
 import hashlib
 import math
-import numpy
 import os
 import tempfile
 import time
+import wave
 
 import cv2
 import ffmpeg
+import numpy
 import pyaudio
-import wave
-from video_to_ascii.render_strategy.image_processor import (
-    brightness_to_ascii,
-    increase_saturation,
-    rgb_to_brightness,
-)
 from video_to_ascii.render_strategy.ascii_strategy import AsciiStrategy
+from video_to_ascii.render_strategy.image_processor import (
+    brightness_to_ascii, increase_saturation, rgb_to_brightness)
 
 from .colors import rgb_to_color_pair
-
 
 ascii_strategy = AsciiStrategy()
 
@@ -277,14 +273,15 @@ class VideoWindow:
             audio_stream.write(audio_data)
             frame = self.get_curses_frame(frame_num)
             self.render_frame(frame, 0, 0)
-            self.window.refresh()
+            self.window.noutrefresh()
+
+            yield frame_num
 
             t1 = time.process_time()
             remaining = frame_delta - (t1 - t0)
 
             if remaining > 0:
                 time.sleep(remaining)
-            yield
 
         p.terminate()
         self.should_render = True

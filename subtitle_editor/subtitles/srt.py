@@ -54,6 +54,12 @@ class SubtitleEntry:
         if self.subtitle.start >= self.subtitle.end:
             self.subtitle.start = self.subtitle.end - ONE_FRAME
 
+    def set_start(self, timedelta):
+        self.subtitle.start = timedelta
+
+    def set_end(self, timedelta):
+        self.subtitle.end = timedelta
+
     def get_timestamps(self):
         return self.subtitle.start, self.subtitle.end
 
@@ -150,6 +156,46 @@ class SubtitlePad:
             subtitle.adjust_end(timedelta)
         self.should_render = True
 
+    def set_timestamp(self, timedelta):
+        subtitle = self.subtitles[self.selected_subtitle]
+        if self.selected_timestamp == "start":
+            subtitle.set_start(timedelta)
+        else:
+            subtitle.set_end(timedelta)
+        self.should_render = True
+
     def get_timestamps(self):
         subtitle = self.subtitles[self.selected_subtitle]
         return subtitle.get_timestamps()
+
+    def start_playback(self):
+        self._selected_timestamp = self.selected_timestamp
+        self._selected_subtitle = self.selected_subtitle
+        self.selected_timestamp = "start"
+        self.selected_subtitle = 0
+        self.should_render = True
+
+    def end_playback(self):
+        self.selected_timestamp = self._selected_timestamp
+        self.selected_subtitle = self._selected_subtitle
+        self.should_render = True
+
+    def playback_mark(self, frame_num):
+        self.set_timestamp(frame_num * ONE_FRAME)
+        if self.selected_timestamp == "start":
+            self.selected_timestamp = "end"
+        else:
+            self.selected_timestamp = "start"
+            self.selected_subtitle += 1
+            if self.selected_subtitle >= len(self.subtitles):
+                return True
+        self.should_render = True
+
+    def playback_undo(self):
+        if self.selected_timestamp == "end":
+            self.selected_timestamp = "start"
+            self.should_render = True
+        elif self.selected_subtitle > 0:
+            self.selected_subtitle -= 1
+            self.selected_timestamp = "end"
+            self.should_render = True

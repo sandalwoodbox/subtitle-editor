@@ -1,4 +1,5 @@
 import curses
+from datetime import timedelta
 
 import click
 import srt
@@ -27,13 +28,6 @@ def run_editor(stdscr, subtitles, video):
     # Set up ANSI colors
     setup_colors()
 
-    stdscr.addstr(
-        curses.LINES - 1,
-        0,
-        "Enter p, <tab>, +/-, n, d, q, ?".ljust(curses.COLS - 1),
-        curses.color_pair(Pairs.STATUS),
-    )
-
     video_window = VideoWindow(video, 0)
     video_window.load_frames()
     subtitle_pad = SubtitlePad(
@@ -45,6 +39,12 @@ def run_editor(stdscr, subtitles, video):
     cmd = None
 
     while cmd != "q":
+        stdscr.addstr(
+            curses.LINES - 1,
+            0,
+            "Enter p, <tab>, +/-, n, d, q, ?".ljust(curses.COLS - 1),
+            curses.color_pair(Pairs.STATUS),
+        )
         stdscr.noutrefresh()
         subtitle_pad.render()
         video_window.render()
@@ -73,10 +73,48 @@ def run_editor(stdscr, subtitles, video):
             subtitle_pad.adjust_timestamp(-1 * ONE_SECOND)
             video_window.set_timestamps(subtitle_pad.get_timestamps())
         elif cmd == "p":
-            start, end = subtitle_pad.get_timestamps()
             video_window.set_timestamps(subtitle_pad.get_timestamps())
             for _ in video_window.play():
                 pass
+        elif cmd == "P":
+            start, end = timedelta(0), timedelta(
+                seconds=video_window.frame_count / video_window.fps
+            )
+            video_window.set_timestamps((start, end))
+            stdscr.nodelay(True)
+
+            subtitle_pad.start_playback()
+            subtitle_pad.render()
+            stdscr.addstr(
+                curses.LINES - 1,
+                0,
+                "Press <space> to go to the next timestamp, u to undo, or q to stop".ljust(
+                    curses.COLS - 1
+                ),
+                curses.color_pair(Pairs.STATUS),
+            )
+            selected_timestamp = "start"
+            selected_subtitle = 0
+            play_cmd = ""
+            for frame_num in video_window.play():
+                subtitle_pad.render()
+                curses.doupdate()
+                try:
+                    play_cmd = stdscr.getkey()
+                except curses.error:
+                    continue
+
+                if play_cmd == " ":
+                    done = subtitle_pad.playback_mark(frame_num)
+                    if done:
+                        break
+                elif play_cmd == "u":
+                    subtitle_pad.playback_undo()
+                elif play_cmd == "q":
+                    break
+            stdscr.nodelay(False)
+            subtitle_pad.end_playback()
+            video_window.set_timestamps(subtitle_pad.get_timestamps())
         else:
             message = f"Unknown command: {cmd}"
 
