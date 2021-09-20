@@ -10,15 +10,15 @@ from .subtitles.srt import SubtitlePad
 from .video import VideoWindow
 
 MODIFY_HELP = """
-p     Play the video between the start/end timestamps
-<tab> Select the start timestamp
-e     Select the end timestamp
-=/+   Increase the selected timestamp by one frame / 1 sec
--/_   Decrease the selected timestamp by one frame / 1 sec
-n     Move to the next subtitle
-d     Finish editing subtitles and output results
-q     Abort without outputting results
-?     Display this message
+P         Enter playback mode to set timestamps while watching
+p         Play the video between the start/end timestamps
+<tab>/←/→ Switch between start/end timestamps
+↑/↓       Select a subtitle
+=/+       Increase the selected timestamp by one frame / 1 sec
+-/_       Decrease the selected timestamp by one frame / 1 sec
+q         Finish editing subtitles and output results
+Ctrl + C  Exit without saving results
+?         Display this message
 """
 
 
@@ -51,7 +51,18 @@ def run_editor(stdscr, subtitles, video):
         curses.doupdate()
         cmd = stdscr.getkey()
         if cmd == "?":
-            message = MODIFY_HELP
+            stdscr.clear()
+            stdscr.addstr(0, 0, MODIFY_HELP)
+            stdscr.addstr(
+                curses.LINES - 1,
+                0,
+                "Press any key to continue...".ljust(curses.COLS - 1),
+                curses.color_pair(Pairs.STATUS),
+            )
+            stdscr.getkey()
+            stdscr.clear()
+            subtitle_pad.should_render = True
+            video_window.should_render = True
         elif cmd == "KEY_UP":
             subtitle_pad.previous()
             video_window.set_timestamps(subtitle_pad.get_timestamps())
@@ -115,8 +126,6 @@ def run_editor(stdscr, subtitles, video):
             stdscr.nodelay(False)
             subtitle_pad.end_playback()
             video_window.set_timestamps(subtitle_pad.get_timestamps())
-        else:
-            message = f"Unknown command: {cmd}"
 
 
 @click.command()
