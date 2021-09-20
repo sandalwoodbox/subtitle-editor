@@ -1,4 +1,5 @@
 import curses
+import json
 import math
 import numpy
 import os
@@ -119,12 +120,26 @@ class VideoWindow:
         self.end_ts = None
         self.should_render = True
 
-        # Structure: {frame_num: rendered_frame}
-        self._cache = {frame_num: None for frame_num in range(self.frame_count)}
+        # Structure: [rendered_frame, ...]
+        self._cache = [None for frame_num in range(self.frame_count)]
 
-    def precache(self):
+    def load_frames(self, frame_cache):
         self.window.clear()
-        self.window.addstr(0, 0, f"Caching rendered frames...")
+
+        if frame_cache and os.path.exists(frame_cache):
+            self.window.addstr(0, 0, f"Loading cached frames...")
+            self.window.refresh()
+            try:
+                with open(frame_cache, "r") as fp:
+                    self._cache = json.load(fp)
+            except json.JSONDecodeError:
+                pass
+            else:
+                for i, value in enumerate(self._cache):
+                    self._cache[i] = numpy.array(value)
+                return
+
+        self.window.addstr(0, 0, f"Rendering frames...")
         self.window.addstr(1, 0, ascii_strategy.build_progress(0, self.frame_count))
         self.window.refresh()
         frame_num = 0
@@ -143,6 +158,12 @@ class VideoWindow:
             )
             self.window.refresh()
             frame_num += 1
+
+        if frame_cache:
+            self.window.addstr(0, 0, f"Caching frames...")
+            self.window.refresh()
+            with open(frame_cache, "w") as fp:
+                json.dump([curses_frame.tolist() for curses_frame in self._cache], fp)
 
     def set_timestamps(self, timestamps):
         self.start_ts, self.end_ts = timestamps

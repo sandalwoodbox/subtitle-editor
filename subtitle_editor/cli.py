@@ -21,7 +21,7 @@ q     Abort without outputting results
 """
 
 
-def run_editor(stdscr, subtitles, video):
+def run_editor(stdscr, subtitles, video, frame_cache):
     curses.curs_set(0)
 
     # Set up ANSI colors
@@ -35,7 +35,7 @@ def run_editor(stdscr, subtitles, video):
     )
 
     video_window = VideoWindow(video, 0)
-    video_window.precache()
+    video_window.load_frames(frame_cache)
     subtitle_pad = SubtitlePad(
         subtitles, video_window.window.getmaxyx()[0] + 1, curses.LINES - 2
     )
@@ -84,7 +84,8 @@ def run_editor(stdscr, subtitles, video):
 @click.argument("subs_in", type=click.File("r"))
 @click.argument("video", type=click.Path(exists=True))
 @click.option("-o", "--output", "srt_out", required=True, type=click.File("w"))
-def cli(subs_in, video, srt_out):
+@click.option("--frame-cache", "frame_cache", type=click.Path())
+def cli(subs_in, video, srt_out, frame_cache):
     try:
         subtitles = list(srt.parse(subs_in))
     except srt.SRTParseError:
@@ -95,5 +96,5 @@ def cli(subs_in, video, srt_out):
             for i, line in enumerate(subs_in)
         ]
 
-    curses.wrapper(run_editor, subtitles, video)
+    curses.wrapper(run_editor, subtitles, video, frame_cache)
     srt_out.write(srt.compose(subtitles))
