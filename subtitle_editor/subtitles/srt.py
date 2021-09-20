@@ -168,19 +168,7 @@ class SubtitlePad:
         subtitle = self.subtitles[self.selected_subtitle]
         return subtitle.get_timestamps()
 
-    def start_playback(self):
-        self._selected_timestamp = self.selected_timestamp
-        self._selected_subtitle = self.selected_subtitle
-        self.selected_timestamp = "start"
-        self.selected_subtitle = 0
-        self.should_render = True
-
-    def end_playback(self):
-        self.selected_timestamp = self._selected_timestamp
-        self.selected_subtitle = self._selected_subtitle
-        self.should_render = True
-
-    def playback_mark(self, frame_num):
+    def playback_set_frame(self, frame_num):
         self.set_timestamp(frame_num * ONE_FRAME)
         if self.selected_timestamp == "start":
             self.selected_timestamp = "end"
