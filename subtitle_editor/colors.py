@@ -8,9 +8,14 @@ class Pairs(enum.IntEnum):
     # We've made odd numbers above 232 available for custom color pairs
     # without disrupting video coloring
     STATUS = 233
+    DIM_STANDOUT = 235
+
+    # Use an actual greyscale for this because it works.
+    DIM = 242
 
 
 # standard 8-bit color palette
+# https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit
 COLORS = [
     (0, 0, 0),  # 0
     (128, 0, 0),  # 1
@@ -296,3 +301,4 @@ def setup_colors():
     # We've made odd numbers above 232 available for custom color pairs
     # without disrupting video coloring
     curses.init_pair(Pairs.STATUS, 15, 12)
+    curses.init_pair(Pairs.DIM_STANDOUT, 232, Pairs.DIM)

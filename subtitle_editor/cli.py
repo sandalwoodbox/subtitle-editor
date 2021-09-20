@@ -166,9 +166,24 @@ def run_editor(stdscr, subtitles, video):
         elif cmd == "?":
             display_help(stdscr, video_window, subtitle_pad, EDITOR_HELP)
         elif cmd == "p":
+            subtitle_pad.disable()
+            subtitle_pad.render()
+            start, end = subtitle_pad.get_timestamps()
+            start_timestamp = srt.timedelta_to_srt_timestamp(start)
+            end_timestamp = srt.timedelta_to_srt_timestamp(end)
+            stdscr.addstr(
+                curses.LINES - 1,
+                0,
+                f"Playing video: {start_timestamp} --> {end_timestamp}".ljust(
+                    curses.COLS - 1
+                ),
+                curses.color_pair(Pairs.STATUS),
+            )
+            stdscr.noutrefresh()
             video_window.set_timestamps(subtitle_pad.get_timestamps())
             for _ in video_window.play():
-                pass
+                curses.doupdate()
+            subtitle_pad.enable()
         elif cmd == "P":
             run_playback_mode(stdscr, video_window, subtitle_pad)
 

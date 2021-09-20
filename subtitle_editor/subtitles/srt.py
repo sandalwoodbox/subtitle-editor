@@ -5,6 +5,7 @@ from textwrap import TextWrapper
 import srt
 
 from ..constants import ONE_FRAME
+from ..colors import Pairs
 
 
 class SubtitleEntry:
@@ -20,25 +21,30 @@ class SubtitleEntry:
         # - 1 for each line of content
         return 2 + len(self.wrapped_content)
 
-    def render(self, pad, is_selected, selected_timestamp, start_line):
-        index_style = curses.A_NORMAL
-        start_style = curses.A_NORMAL
-        end_style = curses.A_NORMAL
+    def render(self, pad, is_selected, selected_timestamp, start_line, dim=False):
+        default_style = curses.A_NORMAL
+        standout_style = curses.A_STANDOUT
+        if dim:
+            default_style = curses.color_pair(Pairs.DIM)
+            standout_style = curses.color_pair(Pairs.DIM_STANDOUT)
+
+        start_style = default_style
+        end_style = default_style
         if is_selected:
             if selected_timestamp == "start":
-                start_style = curses.A_STANDOUT
+                start_style = standout_style
             else:
-                end_style = curses.A_STANDOUT
-        pad.addstr(start_line, 0, str(self.subtitle.index), index_style)
+                end_style = standout_style
+        pad.addstr(start_line, 0, str(self.subtitle.index), default_style)
 
         start_timestamp = srt.timedelta_to_srt_timestamp(self.subtitle.start)
         end_timestamp = srt.timedelta_to_srt_timestamp(self.subtitle.end)
 
         pad.addstr(start_line + 1, 0, start_timestamp, start_style)
         end_of_start = len(start_timestamp)
-        pad.addstr(start_line + 1, end_of_start + 1, "-->")
+        pad.addstr(start_line + 1, end_of_start + 1, "-->", default_style)
         pad.addstr(start_line + 1, end_of_start + 5, end_timestamp, end_style)
-        pad.addstr(start_line + 2, 0, "\n".join(self.wrapped_content))
+        pad.addstr(start_line + 2, 0, "\n".join(self.wrapped_content), default_style)
 
     def adjust_start(self, adjustment):
         self.subtitle.start += adjustment
@@ -79,6 +85,7 @@ class SubtitlePad:
         self.end_line = self.displayed_lines
 
         self.should_render = True
+        self.enabled = True
 
     def nlines(self):
         # The total number of lines is:
@@ -103,6 +110,7 @@ class SubtitlePad:
                 i == self.selected_subtitle,
                 self.selected_timestamp,
                 start_line,
+                dim=not self.enabled,
             )
             start_line += subtitle.nlines() + 1
 
@@ -187,3 +195,11 @@ class SubtitlePad:
             self.selected_subtitle -= 1
             self.selected_timestamp = "end"
             self.should_render = True
+
+    def disable(self):
+        self.enabled = False
+        self.should_render = True
+
+    def enable(self):
+        self.enabled = True
+        self.should_render = True
