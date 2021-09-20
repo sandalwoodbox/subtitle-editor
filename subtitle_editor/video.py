@@ -138,11 +138,11 @@ class VideoWindow:
 
         temp_dir = tempfile.gettempdir()
         frame_cache = os.path.join(
-            temp_dir, f"subtitle-editor-frames-{self.video_hash}.npy"
+            temp_dir, f"subtitle-editor-frames-{self.video_hash}-{self.video_width}x{self.video_height}.npy"
         )
 
         if os.path.exists(frame_cache):
-            self.window.addstr(0, 0, f"Loading cached frames...")
+            self.window.addstr(0, 0, f"Loading cached {self.video_width}x{self.video_height} frames...")
             self.window.refresh()
             try:
                 with open(frame_cache, "rb") as fp:
@@ -152,7 +152,7 @@ class VideoWindow:
             else:
                 return
 
-        self.window.addstr(0, 0, f"Rendering frames...")
+        self.window.addstr(0, 0, f"Rendering {self.video_width}x{self.video_height} frames...")
         self.window.addstr(1, 0, ascii_strategy.build_progress(0, self.frame_count))
         self.window.refresh()
         frame_num = 0
@@ -172,7 +172,7 @@ class VideoWindow:
             self.window.refresh()
             frame_num += 1
 
-        self.window.addstr(0, 0, f"Caching frames...")
+        self.window.addstr(0, 0, f"Caching {self.video_width}x{self.video_height} frames...")
         self.window.refresh()
         with open(frame_cache, "wb") as fp:
             numpy.save(fp, self._cache, allow_pickle=False)
