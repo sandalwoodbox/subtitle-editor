@@ -1,4 +1,5 @@
 import curses
+import hashlib
 import math
 import numpy
 import os
@@ -93,6 +94,14 @@ def frame_to_curses(frame):
 class VideoWindow:
     def __init__(self, video, start_line):
         self.video = video
+
+        # Calculate md5 hash of video content (for temp files)
+        hash_md5 = hashlib.md5()
+        with open(video, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        self.video_hash = hash_md5.hexdigest()
+
         self.cap = cv2.VideoCapture(video)
         self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
@@ -125,10 +134,15 @@ class VideoWindow:
             dtype=numpy.int16,
         )
 
-    def load_frames(self, frame_cache):
+    def load_frames(self):
         self.window.clear()
 
-        if frame_cache and os.path.exists(frame_cache):
+        temp_dir = tempfile.gettempdir()
+        frame_cache = os.path.join(
+            temp_dir, f"subtitle-editor-frames-{self.video_hash}.npy"
+        )
+
+        if os.path.exists(frame_cache):
             self.window.addstr(0, 0, f"Loading cached frames...")
             self.window.refresh()
             try:
@@ -159,11 +173,10 @@ class VideoWindow:
             self.window.refresh()
             frame_num += 1
 
-        if frame_cache:
-            self.window.addstr(0, 0, f"Caching frames...")
-            self.window.refresh()
-            with open(frame_cache, "wb") as fp:
-                numpy.save(fp, self._cache, allow_pickle=False)
+        self.window.addstr(0, 0, f"Caching frames...")
+        self.window.refresh()
+        with open(frame_cache, "wb") as fp:
+            numpy.save(fp, self._cache, allow_pickle=False)
 
     def set_timestamps(self, timestamps):
         self.start_ts, self.end_ts = timestamps
