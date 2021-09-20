@@ -11,7 +11,7 @@ subtitle-editor video.mp4 subtitles.srt
 subtitle-editor video.mp4 subtitles.srt --input lyrics.txt
 ```
 
-![alt text](https://github.com/sandalwoodbox/subtitle-editor/blob/main/demo.gif?raw=true)
+![Demo image](https://github.com/sandalwoodbox/subtitle-editor/blob/main/demo.gif?raw=true)
 
 ## Setup (Mac OS)
 
@@ -37,4 +37,37 @@ subtitle-editor video.mp4 subtitles.srt --input lyrics.txt
 
 ```bash
 pip install subtitle-editor
+```
+
+## Using subtitle-editor
+
+The following commands are available within subtitle-editor
+
+### Navigation
+
+```
+<tab>/←/→ Switch between start/end timestamps
+↑/↓       Select a subtitle
+=/+       Increase the selected timestamp by one frame / 1 sec
+-/_       Decrease the selected timestamp by one frame / 1 sec
+```
+
+
+### Playback
+
+```
+P         Enter / leave playback mode
+<space>   In playback mode, set the current timestamp and move to the next one
+u         In playback mode, "undo" by moving back one timestamp (does not
+          actually undo the change)
+p         In standard mode, play the video between the start/end timestamps
+          of the current subtitle
+```
+
+### Other
+
+```
+q         Finish editing subtitles and output results
+Ctrl + c  Exit immediately without saving results
+?         Display help message
 ```
