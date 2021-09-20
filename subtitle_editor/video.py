@@ -252,7 +252,8 @@ class VideoWindow:
         temp_dir = tempfile.gettempdir()
         audio_filename = os.path.join(
             temp_dir,
-            "temp-audiofile-for-vta.wav",
+            # Always use the same file because we only play one at a time.
+            f"subtitle-editor-audio.wav",
         )
         stream = ffmpeg.input(self.video, **input_kwargs)
         stream = ffmpeg.output(stream, audio_filename)
@@ -280,9 +281,12 @@ class VideoWindow:
 
             t1 = time.process_time()
             remaining = frame_delta - (t1 - t0)
+
             if remaining > 0:
                 time.sleep(remaining)
+            yield
 
+        p.terminate()
         self.should_render = True
 
     def refresh(self):

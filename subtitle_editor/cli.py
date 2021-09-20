@@ -75,7 +75,8 @@ def run_editor(stdscr, subtitles, video):
         elif cmd == "p":
             start, end = subtitle_pad.get_timestamps()
             video_window.set_timestamps(subtitle_pad.get_timestamps())
-            video_window.play()
+            for _ in video_window.play():
+                pass
         else:
             message = f"Unknown command: {cmd}"
 
