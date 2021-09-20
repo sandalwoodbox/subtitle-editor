@@ -129,19 +129,24 @@ def run_editor(stdscr, subtitles, video):
 
 
 @click.command()
-@click.argument("subs_in", type=click.File("r"))
 @click.argument("video", type=click.Path(exists=True))
-@click.option("-o", "--output", "srt_out", required=True, type=click.File("w"))
-def cli(subs_in, video, srt_out):
-    try:
-        subtitles = list(srt.parse(subs_in))
-    except srt.SRTParseError:
-        # Assume each line is a subtitle that needs a time associated
-        subs_in.seek(0)
-        subtitles = [
-            srt.Subtitle(i + 1, UNSET_TIME, UNSET_TIME, line)
-            for i, line in enumerate(subs_in)
-        ]
+@click.argument("subs_in", type=click.Path(exists=True))
+@click.option("-o", "--output", "srt_out", type=click.Path())
+def cli(video, subs_in, srt_out):
+    with open(subs_in, "r") as fp:
+        try:
+            subtitles = list(srt.parse(fp))
+        except srt.SRTParseError:
+            # Assume each line is a subtitle that needs a time associated
+            fp.seek(0)
+            subtitles = [
+                srt.Subtitle(i + 1, UNSET_TIME, UNSET_TIME, line)
+                for i, line in enumerate(fp)
+            ]
 
     curses.wrapper(run_editor, subtitles, video)
-    srt_out.write(srt.compose(subtitles))
+    if not srt_out:
+        srt_out = subs_in
+
+    with open(srt_out, "w") as fp:
+        fp.write(srt.compose(subtitles))
