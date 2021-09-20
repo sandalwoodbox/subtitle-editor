@@ -42,7 +42,7 @@ def run_editor(stdscr, subtitles, video):
         stdscr.addstr(
             curses.LINES - 1,
             0,
-            "Enter p, <tab>, +/-, n, d, q, ?".ljust(curses.COLS - 1),
+            "Enter p/P, <tab>, +/-, ↑/↓, q, ?".ljust(curses.COLS - 1),
             curses.color_pair(Pairs.STATUS),
         )
         stdscr.noutrefresh()
