@@ -190,23 +190,24 @@ def run_editor(stdscr, subtitles, video):
 
 @click.command()
 @click.argument("video", type=click.Path(exists=True))
-@click.argument("subs_in", type=click.Path(exists=True))
-@click.option("-o", "--output", "srt_out", type=click.Path())
-def cli(video, subs_in, srt_out):
-    with open(subs_in, "r") as fp:
-        try:
-            subtitles = list(srt.parse(fp))
-        except srt.SRTParseError:
-            # Assume each line is a subtitle that needs a time associated
-            fp.seek(0)
-            subtitles = [
+@click.argument("subtitles", type=click.Path())
+@click.option("-i", "--input", "input_", type=click.Path(exists=True))
+def cli(video, subtitles, input_):
+    if input_:
+        # For plain-input files, each line is a subtitle that needs a time associated
+        with open(input_, "r") as fp:
+            subs = [
                 srt.Subtitle(i + 1, UNSET_TIME, UNSET_TIME, line)
                 for i, line in enumerate(fp)
             ]
+    else:
+        with open(subtitles, "r") as fp:
+            try:
+                subs = list(srt.parse(fp))
+            except srt.SRTParseError:
+                raise click.ClickException("Could not parse srt file.")
 
-    curses.wrapper(run_editor, subtitles, video)
-    if not srt_out:
-        srt_out = subs_in
+    curses.wrapper(run_editor, subs, video)
 
-    with open(srt_out, "w") as fp:
-        fp.write(srt.compose(subtitles))
+    with open(subtitles, "w") as fp:
+        fp.write(srt.compose(subs))
