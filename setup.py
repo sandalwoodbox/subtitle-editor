@@ -18,7 +18,7 @@ URL = 'https://github.com/sandalwoodbox/subtitle-editor'
 EMAIL = 'boxofsandalwood@gmail.com'
 AUTHOR = 'sandalwoodbox'
 REQUIRES_PYTHON = '>=3.7.0'
-VERSION = '0.1.0'
+VERSION = ''  # Read from __version__.py
 
 # What packages are required for this module to be executed?
 REQUIRED = [
