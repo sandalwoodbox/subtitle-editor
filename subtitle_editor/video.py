@@ -243,9 +243,11 @@ class VideoWindow:
         self.should_render = False
 
     def play(self):
-        # Round to frames
+        # Round to frames & clamp to the available frames
         start_frame_num = math.floor(self.start_ts.total_seconds() * self.fps)
+        start_frame_num = numpy.clip(start_frame_num, 0, self.frame_count - 1)
         end_frame_num = math.floor(self.end_ts.total_seconds() * self.fps)
+        end_frame_num = numpy.clip(end_frame_num, 0, self.frame_count - 1)
 
         start = start_frame_num / self.fps
         end = end_frame_num / self.fps
