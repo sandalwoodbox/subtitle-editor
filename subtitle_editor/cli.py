@@ -9,7 +9,6 @@ from .constants import ONE_FRAME, ONE_SECOND, UNSET_TIME
 from .subtitles.srt import SubtitlePad
 from .video import VideoWindow
 
-
 EDITOR_HELP = """
 NAVIGATION
 <tab>/←/→ Switch between start/end timestamps
@@ -120,9 +119,7 @@ def run_playback_mode(stdscr, video_window, subtitle_pad):
             display_help(stdscr, video_window, subtitle_pad, EDITOR_HELP)
             stdscr.nodelay(True)
         elif cmd == " ":
-            done = subtitle_pad.playback_set_frame(frame_num)
-            if done:
-                break
+            subtitle_pad.playback_set_frame(frame_num)
         elif cmd == "u":
             subtitle_pad.playback_undo()
         elif cmd in ("P", "q"):
@@ -140,8 +137,9 @@ def run_editor(stdscr, subtitles, video):
     video_window = VideoWindow(video, 0)
     video_window.load_frames()
     subtitle_pad = SubtitlePad(
-        subtitles, video_window.window.getmaxyx()[0] + 1, curses.LINES - 2
+        subtitles, video_window.window.getmaxyx()[0] + 1, curses.LINES - 2, curses.COLS
     )
+    subtitle_pad.init_pad()
 
     video_window.set_timestamps(subtitle_pad.get_timestamps())
 
