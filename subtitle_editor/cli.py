@@ -42,6 +42,14 @@ NAVIGATION_COMMANDS = frozenset(
     )
 )
 
+TOGGLE_COMMANDS = frozenset(
+    (
+        "\t",
+        "KEY_LEFT",
+        "KEY_RIGHT",
+    )
+)
+
 
 def handle_navigation_cmd(cmd, subtitle_pad, video_window=None):
     set_timestamps = False
@@ -51,7 +59,7 @@ def handle_navigation_cmd(cmd, subtitle_pad, video_window=None):
     elif cmd == "KEY_DOWN":
         subtitle_pad.next()
         set_timestamps = True
-    elif cmd in ("\t", "KEY_LEFT", "KEY_RIGHT"):
+    elif cmd in TOGGLE_COMMANDS:
         subtitle_pad.toggle_selected_timestamp()
     elif cmd == "=":
         subtitle_pad.adjust_timestamp(ONE_FRAME)
@@ -91,7 +99,7 @@ def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
     stdscr.addstr(
         curses.LINES - 1,
         0,
-        f"{stop_cmd}: Exit playback  <space>: set timestamp & go to next  ?: help".ljust(
+        f"{stop_cmd}: Stop  <space>: set timestamp & go to next  <tab>: toggle start/end  ?: help".ljust(
             curses.COLS - 1
         ),
         curses.color_pair(Pairs.STATUS),
@@ -105,6 +113,8 @@ def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
         current_ts = timedelta(seconds=frame_num / video_window.fps)
         if end_ts != UNSET_TIME and current_ts > end_ts:
             subtitle_pad.next()
+            if subtitle_pad.selected_timestamp == "end":
+                subtitle_pad.toggle_selected_timestamp()
         subtitle_pad.playback_set_timestamp(current_ts)
 
         stdscr.addstr(
@@ -126,6 +136,10 @@ def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
             stdscr.nodelay(True)
         elif cmd == " ":
             subtitle_pad.playback_set_frame(frame_num)
+        elif cmd in TOGGLE_COMMANDS:
+            # Allow toggling so that users can move on from a start
+            # timestamp without setting it.
+            subtitle_pad.toggle_selected_timestamp()
         elif cmd in ("P", "p", "q"):
             break
 
