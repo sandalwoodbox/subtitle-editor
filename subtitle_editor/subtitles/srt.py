@@ -112,7 +112,8 @@ class SubtitlePad:
         # Redraw all subtitles
         start_line = 0
         for i, subtitle in enumerate(self.subtitles):
-            in_bounds = self.playback_timestamp is None
+            # Only dim by default if we're in playback mode
+            dim = self.playback_timestamp is not None
             if i == self.index and self.playback_timestamp is not None:
                 start_ts, end_ts = subtitle.get_timestamps()
 
@@ -121,13 +122,14 @@ class SubtitlePad:
                 if end_ts == UNSET_TIME:
                     end_ts = timedelta.max
 
-                in_bounds = start_ts < self.playback_timestamp < end_ts
+                # Make the selected timestamp dim if it's not in-bounds.
+                dim = not (start_ts <= self.playback_timestamp <= end_ts)
             subtitle.render(
                 self.pad,
                 i == self.index,
                 self.selected_timestamp,
                 start_line,
-                dim=not in_bounds,
+                dim=dim,
             )
             start_line += subtitle.nlines() + 1
 
@@ -220,8 +222,8 @@ class SubtitlePad:
         # natural during playback of lyrics
         if end_ts == UNSET_TIME:
             end_ts = timedelta.max
-        old_in_bounds = start_ts < self.playback_timestamp < end_ts
-        new_in_bounds = start_ts < timestamp < end_ts
+        old_in_bounds = start_ts <= self.playback_timestamp <= end_ts
+        new_in_bounds = start_ts <= timestamp <= end_ts
         if old_in_bounds != new_in_bounds:
             self.should_render = True
         self.playback_timestamp = timestamp
