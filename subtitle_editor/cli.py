@@ -212,7 +212,7 @@ def cli(video, subtitles, input_):
         with open(input_, "r") as fp:
             subs = [
                 srt.Subtitle(i + 1, UNSET_TIME, UNSET_TIME, line)
-                for i, line in enumerate(fp)
+                for i, line in enumerate(filter(lambda l: l.strip(), fp))
             ]
     else:
         with open(subtitles, "r") as fp:
