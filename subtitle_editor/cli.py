@@ -1,5 +1,6 @@
 import curses
 import math
+from datetime import timedelta
 
 import click
 import srt
@@ -19,7 +20,6 @@ NAVIGATION
 PLAYBACK
 P         Enter / leave playback mode
 <space>   In playback mode, set the current timestamp and move to the next one
-u         In playback mode, "undo" by moving back one timestamp (does not actually undo the change)
 p         In standard mode, play the video between the start/end timestamps of the current subtitle
 
 OTHER
@@ -88,11 +88,10 @@ def display_help(stdscr, video_window, subtitle_pad, help_text):
 
 def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
     stdscr.nodelay(True)
-
     stdscr.addstr(
         curses.LINES - 1,
         0,
-        f"{stop_cmd}: Exit playback  <space>: set timestamp & go to next  u: undo  ?: help".ljust(
+        f"{stop_cmd}: Exit playback  <space>: set timestamp & go to next  ?: help".ljust(
             curses.COLS - 1
         ),
         curses.color_pair(Pairs.STATUS),
@@ -100,6 +99,20 @@ def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
 
     cmd = ""
     for frame_num in video_window.play():
+        # Auto-progress to the next subtitle if we're past the end of
+        # the current subtitle & the current end_ts is not unset
+        _, end_ts = subtitle_pad.get_timestamps()
+        current_ts = timedelta(seconds=frame_num / video_window.fps)
+        if end_ts != UNSET_TIME and current_ts > end_ts:
+            subtitle_pad.next()
+        subtitle_pad.playback_set_timestamp(current_ts)
+
+        stdscr.addstr(
+            video_window.video_height + 1,
+            0,
+            srt.timedelta_to_srt_timestamp(current_ts),
+        )
+
         subtitle_pad.render()
         curses.doupdate()
         try:
@@ -107,22 +120,24 @@ def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
         except curses.error:
             continue
 
-        if cmd in NAVIGATION_COMMANDS:
-            # Don't pass a video_window because we don't
-            # need to set video timestamps during playback
-            handle_navigation_cmd(cmd, subtitle_pad)
-        elif cmd == "?":
+        if cmd == "?":
             stdscr.nodelay(False)
             display_help(stdscr, video_window, subtitle_pad, EDITOR_HELP)
             stdscr.nodelay(True)
         elif cmd == " ":
             subtitle_pad.playback_set_frame(frame_num)
-        elif cmd == "u":
-            subtitle_pad.playback_undo()
         elif cmd in ("P", "p", "q"):
             break
+
     stdscr.nodelay(False)
     video_window.set_timestamps(subtitle_pad.get_timestamps())
+    subtitle_pad.playback_set_timestamp(None)
+
+    stdscr.addstr(
+        video_window.video_height + 1,
+        0,
+        " " * curses.COLS,
+    )
 
 
 def run_editor(stdscr, subtitles, video):
@@ -162,7 +177,6 @@ def run_editor(stdscr, subtitles, video):
             display_help(stdscr, video_window, subtitle_pad, EDITOR_HELP)
         elif cmd == "p":
             # Play just the video behind the current subtitle
-            start, end = subtitle_pad.get_timestamps()
             video_window.set_timestamps(subtitle_pad.get_timestamps())
             run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd="p")
         elif cmd == "P":

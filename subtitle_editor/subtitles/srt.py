@@ -5,7 +5,7 @@ from textwrap import TextWrapper
 import srt
 
 from ..colors import Pairs
-from ..constants import ONE_FRAME
+from ..constants import ONE_FRAME, UNSET_TIME
 
 
 class SubtitleEntry:
@@ -37,8 +37,8 @@ class SubtitleEntry:
                 end_style = standout_style
         pad.addstr(start_line, 0, str(self.subtitle.index), default_style)
 
-        start_timestamp = srt.timedelta_to_srt_timestamp(self.subtitle.start)
-        end_timestamp = srt.timedelta_to_srt_timestamp(self.subtitle.end)
+        start_timestamp = srt.timedelta_to_srt_timestamp(max(self.subtitle.start, timedelta(0)))
+        end_timestamp = srt.timedelta_to_srt_timestamp(max(self.subtitle.end, timedelta(0)))
 
         pad.addstr(start_line + 1, 0, start_timestamp, start_style)
         end_of_start = len(start_timestamp)
@@ -85,9 +85,9 @@ class SubtitlePad:
         self.end_line = self.displayed_lines
 
         self.should_render = True
-        self.enabled = True
 
         self.pad = None
+        self.playback_timestamp = None
 
     def init_pad(self):
         # Separate function to initialize the curses pad, to simplify testing.
@@ -108,12 +108,22 @@ class SubtitlePad:
         # Redraw all subtitles
         start_line = 0
         for i, subtitle in enumerate(self.subtitles):
+            in_bounds = self.playback_timestamp is None
+            if i == self.index and self.playback_timestamp is not None:
+                start_ts, end_ts = subtitle.get_timestamps()
+
+                # Treat unset as "infinitely" large so that it feels more
+                # natural during playback of lyrics
+                if end_ts == UNSET_TIME:
+                    end_ts = timedelta.max
+
+                in_bounds = start_ts < self.playback_timestamp < end_ts
             subtitle.render(
                 self.pad,
                 i == self.index,
                 self.selected_timestamp,
                 start_line,
-                dim=not self.enabled,
+                dim=not in_bounds,
             )
             start_line += subtitle.nlines() + 1
 
@@ -190,19 +200,23 @@ class SubtitlePad:
             self.index += 1
             self.should_render = True
 
-    def playback_undo(self):
-        if self.selected_timestamp == "end":
-            self.selected_timestamp = "start"
-            self.should_render = True
-        elif self.index > 0:
-            self.index -= 1
-            self.selected_timestamp = "end"
-            self.should_render = True
+    def playback_set_timestamp(self, timestamp):
+        if timestamp is None and self.playback_timestamp is None:
+            return
 
-    def disable(self):
-        self.enabled = False
-        self.should_render = True
+        if timestamp is None or self.playback_timestamp is None:
+            self.should_render = True
+            self.playback_timestamp = timestamp
+            return
 
-    def enable(self):
-        self.enabled = True
-        self.should_render = True
+        start_ts, end_ts = self.get_timestamps()
+
+        # Treat unset as "infinitely" large so that it feels more
+        # natural during playback of lyrics
+        if end_ts == UNSET_TIME:
+            end_ts = timedelta.max
+        old_in_bounds = start_ts < self.playback_timestamp < end_ts
+        new_in_bounds = start_ts < timestamp < end_ts
+        if old_in_bounds != new_in_bounds:
+            self.should_render = True
+        self.playback_timestamp = timestamp
