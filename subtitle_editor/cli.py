@@ -111,7 +111,7 @@ def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
         # the current subtitle & the current end_ts is not unset
         _, end_ts = subtitle_pad.get_timestamps()
         current_ts = timedelta(seconds=frame_num / video_window.fps)
-        if end_ts != UNSET_TIME and current_ts > end_ts:
+        if end_ts != UNSET_TIME and current_ts > end_ts and subtitle_pad.has_next():
             subtitle_pad.next()
             if subtitle_pad.selected_timestamp == "end":
                 subtitle_pad.toggle_selected_timestamp()

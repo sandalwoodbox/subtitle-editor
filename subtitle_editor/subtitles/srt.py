@@ -161,12 +161,13 @@ class SubtitlePad:
         self.index -= 1
         self.should_render = True
 
-    def next(self):
-        if self.index == len(self.subtitles) - 1:
-            return
+    def has_next(self):
+        return self.index < len(self.subtitles) - 1
 
-        self.index += 1
-        self.should_render = True
+    def next(self):
+        if self.has_next():
+            self.index += 1
+            self.should_render = True
 
     def toggle_selected_timestamp(self):
         self.selected_timestamp = "start" if self.selected_timestamp == "end" else "end"
