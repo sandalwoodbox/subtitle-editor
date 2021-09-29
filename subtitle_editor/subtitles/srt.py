@@ -133,19 +133,23 @@ class SubtitlePad:
             )
             start_line += subtitle.nlines() + 1
 
-        # Determine if we need to scroll the pad to get the selected
-        # subtitle in view.
         selected_start = (
             sum(s.nlines() for s in self.subtitles[: self.index]) + self.index
         )
         selected_end = selected_start + self.subtitles[self.index].nlines()
-
-        if selected_start < self.start_line:
+        if self.playback_timestamp is not None:
+            # In playback mode, always display the selected subtitle at the top
             self.start_line = selected_start
             self.end_line = self.start_line + self.displayed_lines
-        elif selected_end > self.end_line:
-            self.end_line = selected_end
-            self.start_line = selected_end - self.displayed_lines
+        else:
+            # In editor mode, only scroll the pad the minimal amount to follow
+            # the "cursor"
+            if selected_start < self.start_line:
+                self.start_line = selected_start
+                self.end_line = self.start_line + self.displayed_lines
+            elif selected_end > self.end_line:
+                self.end_line = selected_end
+                self.start_line = selected_end - self.displayed_lines
         self.pad.noutrefresh(
             self.start_line,
             0,
