@@ -37,8 +37,12 @@ class SubtitleEntry:
                 end_style = standout_style
         pad.addstr(start_line, 0, str(self.subtitle.index), default_style)
 
-        start_timestamp = srt.timedelta_to_srt_timestamp(max(self.subtitle.start, timedelta(0)))
-        end_timestamp = srt.timedelta_to_srt_timestamp(max(self.subtitle.end, timedelta(0)))
+        start_timestamp = srt.timedelta_to_srt_timestamp(
+            max(self.subtitle.start, timedelta(0))
+        )
+        end_timestamp = srt.timedelta_to_srt_timestamp(
+            max(self.subtitle.end, timedelta(0))
+        )
 
         pad.addstr(start_line + 1, 0, start_timestamp, start_style)
         end_of_start = len(start_timestamp)

@@ -12,10 +12,7 @@ import numpy
 import pyaudio
 from video_to_ascii.render_strategy.ascii_strategy import AsciiStrategy
 from video_to_ascii.render_strategy.image_processor import (
-    brightness_to_ascii,
-    increase_saturation,
-    rgb_to_brightness,
-)
+    brightness_to_ascii, increase_saturation, rgb_to_brightness)
 
 from .colors import rgb_to_color_pair
 
