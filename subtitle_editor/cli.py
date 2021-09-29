@@ -1,5 +1,5 @@
 import curses
-from datetime import timedelta
+import math
 
 import click
 import srt
@@ -86,23 +86,20 @@ def display_help(stdscr, video_window, subtitle_pad, help_text):
     stdscr.noutrefresh()
 
 
-def run_playback_mode(stdscr, video_window, subtitle_pad):
-    start, end = timedelta(0), timedelta(
-        seconds=video_window.frame_count / video_window.fps
-    )
-    video_window.set_timestamps((start, end))
+def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
     stdscr.nodelay(True)
+
+    stdscr.addstr(
+        curses.LINES - 1,
+        0,
+        f"{stop_cmd}: Exit playback  <space>: set timestamp & go to next  u: undo  ?: help".ljust(
+            curses.COLS - 1
+        ),
+        curses.color_pair(Pairs.STATUS),
+    )
 
     cmd = ""
     for frame_num in video_window.play():
-        stdscr.addstr(
-            curses.LINES - 1,
-            0,
-            "P: Exit playback  <space>: set timestamp & go to next  u: undo  ?: help".ljust(
-                curses.COLS - 1
-            ),
-            curses.color_pair(Pairs.STATUS),
-        )
         subtitle_pad.render()
         curses.doupdate()
         try:
@@ -122,7 +119,7 @@ def run_playback_mode(stdscr, video_window, subtitle_pad):
             subtitle_pad.playback_set_frame(frame_num)
         elif cmd == "u":
             subtitle_pad.playback_undo()
-        elif cmd in ("P", "q"):
+        elif cmd in ("P", "p", "q"):
             break
     stdscr.nodelay(False)
     video_window.set_timestamps(subtitle_pad.get_timestamps())
@@ -164,26 +161,17 @@ def run_editor(stdscr, subtitles, video):
         elif cmd == "?":
             display_help(stdscr, video_window, subtitle_pad, EDITOR_HELP)
         elif cmd == "p":
-            subtitle_pad.disable()
-            subtitle_pad.render()
+            # Play just the video behind the current subtitle
             start, end = subtitle_pad.get_timestamps()
-            start_timestamp = srt.timedelta_to_srt_timestamp(start)
-            end_timestamp = srt.timedelta_to_srt_timestamp(end)
-            stdscr.addstr(
-                curses.LINES - 1,
-                0,
-                f"Playing video: {start_timestamp} --> {end_timestamp}".ljust(
-                    curses.COLS - 1
-                ),
-                curses.color_pair(Pairs.STATUS),
-            )
-            stdscr.noutrefresh()
             video_window.set_timestamps(subtitle_pad.get_timestamps())
-            for _ in video_window.play():
-                curses.doupdate()
-            subtitle_pad.enable()
+            run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd="p")
         elif cmd == "P":
-            run_playback_mode(stdscr, video_window, subtitle_pad)
+            # Start at the current subtitle and continue to the
+            # end of the video
+            start_ts, _ = subtitle_pad.get_timestamps()
+            start_frame_num = math.floor(start_ts.total_seconds() * video_window.fps)
+            video_window.set_frames(start_frame_num, video_window.frame_count - 1)
+            run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd="P")
 
 
 @click.command()

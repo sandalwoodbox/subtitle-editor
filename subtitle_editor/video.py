@@ -123,8 +123,8 @@ class VideoWindow:
             start_line,
             0,
         )
-        self.start_ts = None
-        self.end_ts = None
+        self.start_frame_num = None
+        self.end_frame_num = None
         self.should_render = True
 
         # Structure: [rendered_frame, ...]
@@ -132,6 +132,19 @@ class VideoWindow:
             (self.frame_count, self.video_height, self.video_width, 2),
             dtype=numpy.int16,
         )
+
+    def set_timestamps(self, timestamps):
+        start_ts, end_ts = timestamps
+        # Round to frames
+        start_frame_num = math.floor(start_ts.total_seconds() * self.fps)
+        end_frame_num = math.floor(end_ts.total_seconds() * self.fps)
+        self.set_frames(start_frame_num, end_frame_num)
+
+    def set_frames(self, start_frame, end_frame):
+        # Clamp to the available frames
+        self.start_frame_num = numpy.clip(start_frame, 0, self.frame_count - 1)
+        self.end_frame_num = numpy.clip(end_frame, 0, self.frame_count - 1)
+        self.should_render = True
 
     def load_frames(self):
         self.window.clear()
@@ -184,10 +197,6 @@ class VideoWindow:
         with open(frame_cache, "wb") as fp:
             numpy.save(fp, self._cache, allow_pickle=False)
 
-    def set_timestamps(self, timestamps):
-        self.start_ts, self.end_ts = timestamps
-        self.should_render = True
-
     def get_curses_frame(self, frame_num, crop_w=None, crop_h=None):
         """
         Get a cached curses frame and center-crop it to the given dimensions
@@ -225,13 +234,13 @@ class VideoWindow:
         self.window.clear()
 
         start_frame = self.get_curses_frame(
-            math.floor(self.start_ts.total_seconds() * self.fps),
+            self.start_frame_num,
             # Crop video to half width for display
             self.video_width // 2,
         )
         self.render_frame(start_frame, 0, 0)
         end_frame = self.get_curses_frame(
-            math.floor(self.end_ts.total_seconds() * self.fps),
+            self.end_frame_num,
             # Crop video to half width for display
             self.video_width // 2,
         )
@@ -243,17 +252,11 @@ class VideoWindow:
         self.should_render = False
 
     def play(self):
-        # Round to frames & clamp to the available frames
-        start_frame_num = math.floor(self.start_ts.total_seconds() * self.fps)
-        start_frame_num = numpy.clip(start_frame_num, 0, self.frame_count - 1)
-        end_frame_num = math.floor(self.end_ts.total_seconds() * self.fps)
-        end_frame_num = numpy.clip(end_frame_num, 0, self.frame_count - 1)
-
-        start = start_frame_num / self.fps
-        end = end_frame_num / self.fps
+        start_ts = self.start_frame_num / self.fps
+        end_ts = self.end_frame_num / self.fps
         input_kwargs = {
-            "ss": start,
-            "t": end - start,
+            "ss": start_ts,
+            "t": end_ts - start_ts,
         }
 
         # Set up audio clip
@@ -261,7 +264,7 @@ class VideoWindow:
         audio_filename = os.path.join(
             temp_dir,
             # Always use the same file because we only play one at a time.
-            f"subtitle-editor-audio.wav",
+            "subtitle-editor-audio.wav",
         )
         stream = ffmpeg.input(self.video, **input_kwargs)
         stream = ffmpeg.output(stream, audio_filename)
@@ -279,7 +282,7 @@ class VideoWindow:
         )
 
         frame_delta = 1 / self.fps
-        for frame_num in range(start_frame_num, end_frame_num + 1):
+        for frame_num in range(self.start_frame_num, self.end_frame_num + 1):
             t0 = time.process_time()
             audio_data = wave_file.readframes(audio_chunk)
             audio_stream.write(audio_data)
