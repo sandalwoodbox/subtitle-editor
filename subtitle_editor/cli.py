@@ -160,10 +160,10 @@ def run_editor(stdscr, subtitles, video):
     # Set up ANSI colors
     setup_colors()
 
-    video_window = VideoWindow(video, 0)
+    video_window = VideoWindow(video)
     video_window.load_frames()
     subtitle_pad = SubtitlePad(
-        subtitles, video_window.window.getmaxyx()[0] + 1, curses.LINES - 2, curses.COLS
+        subtitles, video_window.video_height + 2, curses.LINES - 2, curses.COLS
     )
     subtitle_pad.init_pad()
 

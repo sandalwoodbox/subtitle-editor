@@ -89,7 +89,7 @@ def frame_to_curses(frame):
 
 
 class VideoWindow:
-    def __init__(self, video, start_line):
+    def __init__(self, video):
         self.video = video
 
         # Calculate md5 hash of video content (for temp files)
@@ -113,14 +113,11 @@ class VideoWindow:
             crop=False,
         )
 
-        self.window = curses.newwin(
-            # Lines. Add an extra line of buffer.
-            self.video_height + 1,
-            # Cols. Multiply by 2 to get cols from pixels.
-            self.video_width * 2,
-            start_line,
-            0,
-        )
+        # Pads are the full size of the video - it's just a question of how
+        # we display and crop them.
+        self.left_pad = curses.newpad(self.video_height, curses.COLS)
+        self.right_pad = curses.newpad(self.video_height, curses.COLS)
+
         self.start_frame_num = None
         self.end_frame_num = None
         self.should_render = True
@@ -144,8 +141,44 @@ class VideoWindow:
         self.end_frame_num = numpy.clip(end_frame, 0, self.frame_count - 1)
         self.should_render = True
 
+    def refresh_full(self, pad, nout=False):
+        refresh = pad.noutrefresh if nout else pad.refresh
+        height, width = pad.getmaxyx()
+        refresh(
+            0,  # Pad area to start display
+            0,
+            0,  # Upper left of window area
+            0,
+            height - 1,  # Lower right of window area
+            width - 1,
+        )
+
+    def refresh_left(self, pad, nout=False):
+        refresh = pad.noutrefresh if nout else pad.refresh
+        height, width = pad.getmaxyx()
+        refresh(
+            0,  # Pad area to start display
+            width // 4,
+            0,  # Upper left of window area
+            0,
+            height - 1,  # Lower right of window area
+            width // 2 - 1,
+        )
+
+    def refresh_right(self, pad, nout=False):
+        refresh = pad.noutrefresh if nout else pad.refresh
+        height, width = pad.getmaxyx()
+        refresh(
+            0,  # Pad area to start display
+            width // 4,
+            0,  # Upper left of window area
+            width // 2 + 1,
+            height - 1,  # Lower right of window area
+            width - 1,
+        )
+
     def load_frames(self):
-        self.window.clear()
+        self.left_pad.clear()
 
         temp_dir = tempfile.gettempdir()
         frame_cache = os.path.join(
@@ -154,23 +187,26 @@ class VideoWindow:
         )
 
         if os.path.exists(frame_cache):
-            self.window.addstr(
+            self.left_pad.addstr(
                 0, 0, f"Loading cached {self.video_width}x{self.video_height} frames..."
             )
-            self.window.refresh()
+            self.refresh_full(self.left_pad)
             try:
                 with open(frame_cache, "rb") as fp:
-                    self._cache = numpy.load(fp, allow_pickle=False)
-            except (IOError, ValueError):
-                self.window.clear()
+                    numpy.copyto(self._cache, numpy.load(fp, allow_pickle=False))
+            except (IOError, ValueError, TypeError):
+                # IOError: couldn't read file
+                # ValueError: Shape doesn't match
+                # TypeError: Unable to convert types
+                self.left_pad.clear()
             else:
                 return
 
-        self.window.addstr(
+        self.left_pad.addstr(
             0, 0, f"Rendering {self.video_width}x{self.video_height} frames..."
         )
-        self.window.addstr(1, 0, ascii_strategy.build_progress(0, self.frame_count))
-        self.window.refresh()
+        self.left_pad.addstr(1, 0, ascii_strategy.build_progress(0, self.frame_count))
+        self.refresh_full(self.left_pad)
         frame_num = 0
         width, height = self.video_width, self.video_height
 
@@ -182,44 +218,31 @@ class VideoWindow:
             resized_frame = resize_frame(frame, width, height)
             curses_frame = frame_to_curses(resized_frame)
             self._cache[frame_num] = curses_frame
-            self.window.addstr(
+            self.left_pad.addstr(
                 1, 0, ascii_strategy.build_progress(frame_num, self.frame_count)
             )
-            self.window.refresh()
+            self.refresh_full(self.left_pad)
             frame_num += 1
 
-        self.window.addstr(
+        self.left_pad.addstr(
             0, 0, f"Caching {self.video_width}x{self.video_height} frames..."
         )
-        self.window.refresh()
+        self.refresh_full(self.left_pad)
         with open(frame_cache, "wb") as fp:
             numpy.save(fp, self._cache, allow_pickle=False)
 
-    def get_curses_frame(self, frame_num, crop_w=None, crop_h=None):
-        """
-        Get a cached curses frame and center-crop it to the given dimensions
-        """
-
+    def render_frame(self, pad, frame_num):
         curses_frame = self._cache[frame_num]
-        frame_h, frame_w = curses_frame.shape
-        if crop_w is None:
-            crop_w = frame_w
-        if crop_h is None:
-            crop_h = frame_h
-        crop_x = (frame_w - crop_w) // 2
-        crop_y = (frame_h - crop_h) // 2
-        return curses_frame[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
-
-    def render_frame(self, curses_frame, start_x, start_y):
         it = numpy.nditer(curses_frame, flags=["multi_index"])
         for pixel in it:
-            i, j = it.multi_index
-            y = start_y + i
-            # Double x offset because 1 pixel = 2 cols
-            x = start_x + j * 2
+            y, x = it.multi_index
             try:
-                self.window.addstr(
-                    y, x, chr(pixel["ord"]) * 2, curses.color_pair(pixel["color_pair"])
+                pad.addstr(
+                    # 1 pixel = 2 cols
+                    y,
+                    x * 2,
+                    chr(pixel["ord"]) * 2,
+                    curses.color_pair(pixel["color_pair"]),
                 )
             except curses.error:
                 raise Exception(
@@ -230,27 +253,19 @@ class VideoWindow:
         if not self.should_render:
             return
 
-        self.window.clear()
+        self.left_pad.clear()
+        self.right_pad.clear()
 
-        start_frame = self.get_curses_frame(
-            self.start_frame_num,
-            # Crop video to half width for display
-            self.video_width // 2,
-        )
-        self.render_frame(start_frame, 0, 0)
-        end_frame = self.get_curses_frame(
-            self.end_frame_num,
-            # Crop video to half width for display
-            self.video_width // 2,
-        )
-        # start_x is half the video width, but multiplied by two
-        # because pixels are 2 cols wide (so it cancels out to just video_width)
-        self.render_frame(end_frame, self.video_width, 0)
+        self.render_frame(self.left_pad, self.start_frame_num)
+        self.render_frame(self.right_pad, self.end_frame_num)
 
-        self.window.noutrefresh()
+        self.refresh_left(self.left_pad, nout=True)
+        self.refresh_right(self.right_pad, nout=True)
         self.should_render = False
 
     def play(self):
+        self.left_pad.clear()
+        self.right_pad.clear()
         start_ts = self.start_frame_num / self.fps
         end_ts = self.end_frame_num / self.fps
         input_kwargs = {
@@ -285,9 +300,8 @@ class VideoWindow:
             t0 = time.process_time()
             audio_data = wave_file.readframes(audio_chunk)
             audio_stream.write(audio_data)
-            frame = self.get_curses_frame(frame_num)
-            self.render_frame(frame, 0, 0)
-            self.window.noutrefresh()
+            self.render_frame(self.left_pad, frame_num)
+            self.refresh_full(self.left_pad, nout=True)
 
             yield frame_num
 
@@ -299,6 +313,3 @@ class VideoWindow:
 
         p.terminate()
         self.should_render = True
-
-    def refresh(self):
-        self.window.refresh()
