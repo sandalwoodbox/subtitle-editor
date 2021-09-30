@@ -17,6 +17,7 @@ from video_to_ascii.render_strategy.image_processor import (
 from .colors import rgb_to_color_pair
 
 ascii_strategy = AsciiStrategy()
+PIXEL_DTYPE = numpy.dtype([("ord", numpy.int16), ("color_pair", numpy.int16)])
 
 
 def calculate_frame_resize(frame_w, frame_h, target_w, target_h, crop=False):
@@ -79,11 +80,11 @@ def pixel_to_ascii(pixel, colored=True, density=0):
 
 def frame_to_curses(frame):
     height, width, _ = frame.shape
-    curses_frame = numpy.empty((height, width, 2), dtype=numpy.int16)
+    curses_frame = numpy.empty((height, width), dtype=PIXEL_DTYPE)
     for y, row in enumerate(frame):
         for x, pixel in enumerate(row):
             char, pair_number = pixel_to_ascii(pixel, colored=True, density=1)
-            curses_frame[y][x] = [ord(char[0]), pair_number]
+            curses_frame[y][x] = (ord(char[0]), pair_number)
     return curses_frame
 
 
@@ -126,8 +127,8 @@ class VideoWindow:
 
         # Structure: [rendered_frame, ...]
         self._cache = numpy.empty(
-            (self.frame_count, self.video_height, self.video_width, 2),
-            dtype=numpy.int16,
+            (self.frame_count, self.video_height, self.video_width),
+            dtype=PIXEL_DTYPE,
         )
 
     def set_timestamps(self, timestamps):
@@ -200,7 +201,7 @@ class VideoWindow:
         """
 
         curses_frame = self._cache[frame_num]
-        frame_h, frame_w, _ = curses_frame.shape
+        frame_h, frame_w = curses_frame.shape
         if crop_w is None:
             crop_w = frame_w
         if crop_h is None:
@@ -210,19 +211,20 @@ class VideoWindow:
         return curses_frame[crop_y : crop_y + crop_h, crop_x : crop_x + crop_w]
 
     def render_frame(self, curses_frame, start_x, start_y):
-        for i, row in enumerate(curses_frame):
-            for j, (char, pair_number) in enumerate(row):
-                y = start_y + i
-                # Double x offset because 1 pixel = 2 cols
-                x = start_x + j * 2
-                try:
-                    self.window.addstr(
-                        y, x, chr(char) * 2, curses.color_pair(pair_number)
-                    )
-                except curses.error:
-                    raise Exception(
-                        f"Unable to print pixel `{chr(char)}` at y={y} x={x} (color pair {pair_number}; maxyx={self.window.getmaxyx()})"
-                    )
+        it = numpy.nditer(curses_frame, flags=["multi_index"])
+        for pixel in it:
+            i, j = it.multi_index
+            y = start_y + i
+            # Double x offset because 1 pixel = 2 cols
+            x = start_x + j * 2
+            try:
+                self.window.addstr(
+                    y, x, chr(pixel["ord"]) * 2, curses.color_pair(pixel["color_pair"])
+                )
+            except curses.error:
+                raise Exception(
+                    f"Unable to print pixel `{chr(char)}` at y={y} x={x} (color pair {pair_number}; maxyx={self.window.getmaxyx()})"
+                )
 
     def render(self):
         if not self.should_render:
