@@ -178,7 +178,7 @@ class VideoWindow:
         )
 
     def load_frames(self):
-        self.left_pad.clear()
+        self.left_pad.erase()
 
         temp_dir = tempfile.gettempdir()
         frame_cache = os.path.join(
@@ -198,7 +198,7 @@ class VideoWindow:
                 # IOError: couldn't read file
                 # ValueError: Shape doesn't match
                 # TypeError: Unable to convert types
-                self.left_pad.clear()
+                self.left_pad.erase()
             else:
                 return
 
@@ -253,8 +253,8 @@ class VideoWindow:
         if not self.should_render:
             return
 
-        self.left_pad.clear()
-        self.right_pad.clear()
+        self.left_pad.erase()
+        self.right_pad.erase()
 
         self.render_frame(self.left_pad, self.start_frame_num)
         self.render_frame(self.right_pad, self.end_frame_num)
@@ -264,8 +264,8 @@ class VideoWindow:
         self.should_render = False
 
     def play(self):
-        self.left_pad.clear()
-        self.right_pad.clear()
+        self.left_pad.erase()
+        self.right_pad.erase()
         start_ts = self.start_frame_num / self.fps
         end_ts = self.end_frame_num / self.fps
         input_kwargs = {

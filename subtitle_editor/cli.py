@@ -79,7 +79,7 @@ def handle_navigation_cmd(cmd, subtitle_pad, video_window=None):
 
 
 def display_help(stdscr, video_window, subtitle_pad, help_text):
-    stdscr.clear()
+    stdscr.erase()
     stdscr.addstr(0, 0, EDITOR_HELP)
     stdscr.addstr(
         curses.LINES - 1,
@@ -88,7 +88,7 @@ def display_help(stdscr, video_window, subtitle_pad, help_text):
         curses.color_pair(Pairs.STATUS),
     )
     stdscr.getkey()
-    stdscr.clear()
+    stdscr.erase()
     subtitle_pad.should_render = True
     video_window.should_render = True
     stdscr.noutrefresh()

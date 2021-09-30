@@ -112,7 +112,7 @@ class SubtitlePad:
         if not self.should_render:
             return
 
-        self.pad.clear()
+        self.pad.erase()
 
         # Redraw all subtitles
         start_line = 0
