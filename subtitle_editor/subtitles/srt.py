@@ -100,8 +100,13 @@ class SubtitlePad:
     def nlines(self):
         # The total number of lines is:
         # - number of lines for each subtitle
-        # - one line of buffer between subtitles (but not after the last one)
-        return sum(s.nlines() for s in self.subtitles) + len(self.subtitles) - 1
+        # - one line of buffer between subtitles
+        # - one full page of empty line after the last subtitle
+        return (
+            sum(s.nlines() for s in self.subtitles)
+            + len(self.subtitles)
+            + self.displayed_lines
+        )
 
     def render(self):
         if not self.should_render:
