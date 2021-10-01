@@ -69,7 +69,7 @@ def resize_frame(frame, target_w, target_h, crop=False):
     return resized_frame[crop_y : crop_y + resize_h, crop_x : crop_x + resize_w]
 
 
-def pixel_to_ascii(pixel, colored=True, density=0):
+def pixel_to_ascii(pixel, density=0):
     rgb = tuple(float(x) for x in reversed(pixel[:3]))
     bright = rgb_to_brightness(*rgb)
     rgb = increase_saturation(*rgb)
@@ -83,7 +83,7 @@ def frame_to_curses(frame):
     curses_frame = numpy.empty((height, width), dtype=PIXEL_DTYPE)
     for y, row in enumerate(frame):
         for x, pixel in enumerate(row):
-            char, pair_number = pixel_to_ascii(pixel, colored=True, density=1)
+            char, pair_number = pixel_to_ascii(pixel, density=2)
             curses_frame[y][x] = (ord(char[0]), pair_number)
     return curses_frame
 
@@ -236,17 +236,20 @@ class VideoWindow:
         it = numpy.nditer(curses_frame, flags=["multi_index"])
         for pixel in it:
             y, x = it.multi_index
+            # 1 pixel = 2 cols
+            x *= 2
+            chars = chr(pixel["ord"]) * 2
+            color_pair = curses.color_pair(pixel["color_pair"])
             try:
                 pad.addstr(
-                    # 1 pixel = 2 cols
                     y,
-                    x * 2,
-                    chr(pixel["ord"]) * 2,
-                    curses.color_pair(pixel["color_pair"]),
+                    x,
+                    chars,
+                    color_pair,
                 )
             except curses.error:
                 raise Exception(
-                    f"Unable to print pixel `{chr(char)}` at y={y} x={x} (color pair {pair_number}; maxyx={self.window.getmaxyx()})"
+                    f"Unable to print pixel `{chars}` at y={y} x={x} (color pair {color_pair}; maxyx={pad.getmaxyx()})"
                 )
 
     def render(self):
