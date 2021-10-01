@@ -314,5 +314,6 @@ class VideoWindow:
             if remaining > 0:
                 time.sleep(remaining)
 
+        wave_file.close()
         p.terminate()
         self.should_render = True
