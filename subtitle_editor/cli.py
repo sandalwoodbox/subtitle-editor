@@ -23,10 +23,18 @@ P         Enter / leave playback mode
 p         In standard mode, play the video between the start/end timestamps of the current subtitle
 
 OTHER
-q         Finish editing subtitles and output results
-Ctrl + c  Exit immediately without saving results
+q         Save and exit
+Ctrl + c  Exit without saving
 ?         Display this message
 """
+
+TIMESTAMP_STRING = "00:00:00,000 --> 00:00:00,000"
+STANDARD_STATUS_BAR = "↑/↓/←/→: navigate  +/-: adjust time  p/P: playback ?: help"
+STANDARD_STATUS_BAR_SHORT = "↑/↓/←/→   +/-   p/P  ?: help"
+PLAYBACK_STATUS_BAR = (
+    "p: pause  <space>: set & go to next  <tab>: toggle start/end  ?: help"
+)
+PLAYBACK_STATUS_BAR_SHORT = "p  <space>  <tab>  ?: help"
 
 NAVIGATION_COMMANDS = frozenset(
     (
@@ -94,14 +102,17 @@ def display_help(stdscr, video_window, subtitle_pad, help_text):
     stdscr.noutrefresh()
 
 
-def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
+def run_playback_mode(stdscr, video_window, subtitle_pad):
     stdscr.nodelay(True)
+    status_bar = (
+        PLAYBACK_STATUS_BAR
+        if curses.COLS >= len(PLAYBACK_STATUS_BAR)
+        else PLAYBACK_STATUS_BAR_SHORT
+    )
     stdscr.addstr(
         curses.LINES - 1,
         0,
-        f"{stop_cmd}: Stop  <space>: set timestamp & go to next  <tab>: toggle start/end  ?: help".ljust(
-            curses.COLS - 1
-        ),
+        status_bar.ljust(curses.COLS - 1),
         curses.color_pair(Pairs.STATUS),
     )
 
@@ -156,6 +167,15 @@ def run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd):
 
 def run_editor(stdscr, subtitles, video):
     curses.curs_set(0)
+    min_cols = 1 + max(
+        len(STANDARD_STATUS_BAR_SHORT),
+        len(PLAYBACK_STATUS_BAR_SHORT),
+        len(TIMESTAMP_STRING),
+    )
+    if curses.COLS < min_cols:
+        raise click.ClickException(
+            f"Window must be at least {min_cols} columns wide (currently {curses.COLS})"
+        )
 
     # Set up ANSI colors
     setup_colors()
@@ -172,12 +192,15 @@ def run_editor(stdscr, subtitles, video):
     cmd = None
 
     while cmd != "q":
+        status_bar = (
+            STANDARD_STATUS_BAR
+            if curses.COLS >= len(STANDARD_STATUS_BAR)
+            else STANDARD_STATUS_BAR_SHORT
+        )
         stdscr.addstr(
             curses.LINES - 1,
             0,
-            "↑/↓/←/→: navigate  +/-: adjust time  p/P: playback ?: help".ljust(
-                curses.COLS - 1
-            ),
+            status_bar.ljust(curses.COLS - 1),
             curses.color_pair(Pairs.STATUS),
         )
         stdscr.noutrefresh()
@@ -192,14 +215,14 @@ def run_editor(stdscr, subtitles, video):
         elif cmd == "p":
             # Play just the video behind the current subtitle
             video_window.set_timestamps(subtitle_pad.get_timestamps())
-            run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd="p")
+            run_playback_mode(stdscr, video_window, subtitle_pad)
         elif cmd == "P":
             # Start at the current subtitle and continue to the
             # end of the video
             start_ts, _ = subtitle_pad.get_timestamps()
             start_frame_num = math.floor(start_ts.total_seconds() * video_window.fps)
             video_window.set_frames(start_frame_num, video_window.frame_count - 1)
-            run_playback_mode(stdscr, video_window, subtitle_pad, stop_cmd="P")
+            run_playback_mode(stdscr, video_window, subtitle_pad)
 
 
 @click.command()
