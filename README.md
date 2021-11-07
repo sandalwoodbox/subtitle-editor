@@ -11,6 +11,8 @@ subtitle-editor video.mp4 subtitles.srt
 subtitle-editor video.mp4 subtitles.srt --input lyrics.txt
 ```
 
+See the [Tutorial](#tutorial) for details.
+
 ![Demo image](https://github.com/sandalwoodbox/subtitle-editor/blob/main/demo.gif?raw=true)
 
 ## Setup (Mac OS)
@@ -22,13 +24,18 @@ subtitle-editor video.mp4 subtitles.srt --input lyrics.txt
    ```bash
    brew install ffmpeg pyenv portaudio
    ```
-   Read the final output of this command and do any required follow-up steps.
-3. Install python 3
+3. [Finalize your pyenv installation](https://github.com/pyenv/pyenv#homebrew-in-macos) For zsh (standard in newer Macs) this will be:
+   ```bash
+   echo 'eval "$(pyenv init --path)"' >> ~/.zprofile
+
+   echo 'eval "$(pyenv init -)"' >> ~/.zshrc
+   ```
+4. Install python 3
    ```bash
    pyenv install 3.7.11  # Or another python 3 version
    pyenv global 3.7.11
    ```
-4. Update pip (don't skip this)
+5. Update pip (don't skip this)
    ```bash
    pip install -U pip
    ```
@@ -39,9 +46,50 @@ subtitle-editor video.mp4 subtitles.srt --input lyrics.txt
 pip install subtitle-editor
 ```
 
-## Using subtitle-editor
+<a name="tutorial"></a>
 
-The following commands are available within subtitle-editor
+## Tutorial: Add subtitles to a video
+
+1. Create a [plain text](https://en.wikipedia.org/wiki/Plain_text) file that contains each subtitle on a separate line. Blank lines will be ignored. For example:
+
+   ```txt
+   This is the first line
+   This is the second line
+
+   And so on
+   ```
+
+2. Import this file into subtitle-editor
+
+   ```bash
+   cd /path/to/video/project
+   subtitle-editor video.mp4 video.srt --input input.txt
+   ```
+
+   The subtitle-editor will pre-render the frames of your video. _Note: if video.srt already exists it will be overwritten._
+
+3. Now you will create a rough cut of the subtitles. The idea here is to get your timestamps more or less right; you'll do a second pass to clean everything up later.
+
+   Type `P` to start playback, then press the spacebar to set the currently-selected timestamp and move to the next one. Keep going until you get to the end.
+
+4. Type `q` to save your work and exit to the terminal. `video.srt` now exists with your rough cut of subtitles!
+
+5. Run subtitle-editor again, but without passing an input. This will allow you to edit the existing subtitle file.
+
+   ```bash
+   subtitle-editor video.mp4 video.srt
+   ```
+
+6. For each subtitle, type `p` to play the video & audio for that subtitle. Use `↑/↓/←/→` to navigate between subtitles and start/end times. Use `-/_` and `=/+` to modify the times until they are correct.
+
+7. Navigate back to the beginning and type `P` to play back the whole video with subtitles. If there are any issues, type `p` to pause and make adjustments, then press `P` to resume playback.
+
+8. Type `q` to save your work and exit!
+
+
+## Command Reference
+
+When you are using subtitle-editor, you have the following commands available.
 
 ### Navigation
 
@@ -67,7 +115,7 @@ p         In standard mode, play the video between the start/end timestamps
 ### Other
 
 ```
-q         Finish editing subtitles and output results
-Ctrl + c  Exit immediately without saving results
+q         Save and exit
+Ctrl + c  Exit without saving
 ?         Display help message
 ```
