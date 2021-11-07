@@ -161,7 +161,7 @@ class SubtitlePad:
             self.window_start_line,
             0,
             self.window_end_line,
-            self.ncols - 5,
+            self.ncols,
         )
         self.should_render = False
 
