@@ -63,15 +63,19 @@ class SubtitleEntry:
 
     def set_start(self, frame):
         self.start_frame = max(frame, 0)
-        self.end_frame = max(self.start_frame + 1, self.end_frame)
         self.subtitle.start = timedelta(seconds=self.start_frame / self.fps)
-        self.subtitle.end = timedelta(seconds=self.end_frame / self.fps)
+
+        # Don't update unset end frames
+        if self.end_frame != UNSET_FRAME:
+            self.end_frame = max(self.start_frame + 1, self.end_frame)
+            self.subtitle.end = timedelta(seconds=self.end_frame / self.fps)
 
     def set_end(self, frame):
         self.end_frame = max(frame, 1)
+        self.subtitle.end = timedelta(seconds=self.end_frame / self.fps)
+
         self.start_frame = min(self.start_frame, self.end_frame - 1)
         self.subtitle.start = timedelta(seconds=self.start_frame / self.fps)
-        self.subtitle.end = timedelta(seconds=self.end_frame / self.fps)
 
     def get_start(self):
         return self.start_frame
@@ -133,8 +137,8 @@ class SubtitlePad:
 
                 # Treat unset as "infinitely" large so that it feels more
                 # natural during playback of lyrics
-                if end_frame == UNSET_TIME:
-                    end_frame = timedelta.max
+                if end_frame == UNSET_FRAME:
+                    end_frame = math.inf
 
                 # Make the selected timestamp dim if it's not in-bounds.
                 dim = not (start_frame <= self.playback_frame <= end_frame)
@@ -200,6 +204,8 @@ class SubtitlePad:
         subtitle = self.get_selected_subtitle()
         if self.selected_timestamp == "start":
             subtitle.set_start(frame)
+            if progress:
+                self.selected_timestamp = "end"
         else:
             subtitle.set_end(frame)
 
@@ -217,26 +223,29 @@ class SubtitlePad:
         new_index = self.index
 
         # Setting playback_frame to None means playback mode is ended
-        if frame is not None:
-            for index, subtitle in enumerate(self.subtitles):
-                start_frame = subtitle.get_start()
-                # treat unset end as infinite so that it feels more natural during
-                # playback of lyrics
-                end_frame = subtitle.get_end()
-                if end_frame == UNSET_FRAME:
-                    end_frame = math.inf
-
-                # Select the first index that contains the frame
-                if start_frame <= frame <= end_frame:
-                    new_index = index
-                    break
-
-                # Or select the first subtitle that starts after the frame
-                if start_frame > frame:
-                    new_index = index
-                    break
-
-        if new_index != self.index and new_index < len(self.subtitles) - 1:
+        if frame is None:
             self.should_render = True
+            return
+
+        for index, subtitle in enumerate(self.subtitles):
+            start_frame = subtitle.get_start()
+            # treat unset end as infinite so that it feels more natural during
+            # playback of lyrics
+            end_frame = subtitle.get_end()
+            if end_frame == UNSET_FRAME:
+                end_frame = math.inf
+
+            # Select the first index that contains the frame
+            if start_frame <= frame <= end_frame:
+                new_index = index
+                break
+
+            # Or select the first subtitle that starts after the frame
+            if start_frame > frame:
+                new_index = index
+                break
+
+        self.should_render = True
+        if new_index != self.index:
             self.selected_timestamp = "start"
             self.index = new_index

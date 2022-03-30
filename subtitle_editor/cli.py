@@ -1,6 +1,5 @@
 import curses
 import math
-import time
 from datetime import timedelta
 
 import click
@@ -110,10 +109,7 @@ def run_playback_mode(stdscr, video, subtitle_pad, start_frame, end_frame):
     )
 
     cmd = ""
-    frame_delta = 1 / video.fps
     for frame_num in video.play(start_frame, end_frame):
-        # Maintain framerate
-        t0 = time.process_time()
 
         current_ts = timedelta(seconds=frame_num / video.fps)
         stdscr.addstr(
@@ -124,6 +120,7 @@ def run_playback_mode(stdscr, video, subtitle_pad, start_frame, end_frame):
         subtitle_pad.set_playback_frame(frame_num)
         subtitle_pad.render()
         curses.doupdate()
+
         try:
             cmd = stdscr.getkey()
         except curses.error:
@@ -134,20 +131,13 @@ def run_playback_mode(stdscr, video, subtitle_pad, start_frame, end_frame):
             display_help(stdscr, video, subtitle_pad, EDITOR_HELP)
             stdscr.nodelay(True)
         elif cmd == " ":
-            subtitle_pad.set_playback_frame(frame_num)
+            subtitle_pad.set_frame(frame_num, progress=True)
         elif cmd in TOGGLE_COMMANDS:
             # Allow toggling so that users can move on from a start
             # timestamp without setting it.
             subtitle_pad.toggle_selected_timestamp()
         elif cmd in ("P", "p", "q"):
             break
-
-        # Each loop should be no shorter than a frame.
-        t1 = time.process_time()
-        remaining = frame_delta - (t1 - t0)
-
-        if remaining > 0:
-            time.sleep(remaining)
 
     stdscr.nodelay(False)
     video.set_current_frame(subtitle_pad.get_frame())

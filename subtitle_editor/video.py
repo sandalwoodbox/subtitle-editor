@@ -1,5 +1,6 @@
 import os
 import tempfile
+import time
 import wave
 
 import cv2
@@ -63,9 +64,12 @@ class Video:
         )
 
         self.set_current_frame(start_frame)
+        frame_delta = 1 / self.fps
         while self.cap.isOpened():
             ok, frame_data = self.cap.read()
             if ok:
+                # Maintain framerate
+                t0 = time.process_time()
                 audio_data = wave_file.readframes(audio_chunk)
                 audio_stream.write(audio_data)
                 cv2.imshow(self.window_name, frame_data)
@@ -76,6 +80,11 @@ class Video:
                 yield current_frame
                 if current_frame >= end_frame:
                     break
+                # Each loop should be no shorter than a frame.
+                t1 = time.process_time()
+                remaining = frame_delta - (t1 - t0)
+                if remaining > 0:
+                    time.sleep(remaining)
             else:
                 break
 
