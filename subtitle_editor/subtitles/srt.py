@@ -1,18 +1,29 @@
 import curses
+import math
 from datetime import timedelta
 from textwrap import TextWrapper
 
 import srt
 
 from ..colors import Pairs
-from ..constants import ONE_FRAME, UNSET_TIME
+from ..constants import UNSET_TIME, UNSET_FRAME
 
 
 class SubtitleEntry:
-    def __init__(self, subtitle, wrapper):
+    def __init__(self, subtitle, wrapper, fps):
         self.subtitle = subtitle
         self.wrapper = wrapper
         self.wrapped_content = wrapper.wrap(subtitle.content)
+        self.fps = fps
+
+        if subtitle.start == UNSET_TIME:
+            self.start_frame = UNSET_FRAME
+        else:
+            self.start_frame = math.floor(subtitle.start.total_seconds() * fps)
+        if subtitle.end == UNSET_TIME:
+            self.end_frame = UNSET_FRAME
+        else:
+            self.end_frame = math.floor(subtitle.end.total_seconds() * fps)
 
     def nlines(self):
         # Length of an SRT is:
@@ -50,35 +61,29 @@ class SubtitleEntry:
         pad.addstr(start_line + 1, end_of_start + 5, end_timestamp, end_style)
         pad.addstr(start_line + 2, 0, "\n".join(self.wrapped_content), default_style)
 
-    def adjust_start(self, adjustment):
-        self.subtitle.start += adjustment
-        if self.subtitle.start < timedelta(0):
-            self.subtitle.start = timedelta(0)
-        if self.subtitle.end <= self.subtitle.start:
-            self.subtitle.end = self.subtitle.start + ONE_FRAME
+    def set_start(self, frame):
+        self.start_frame = max(frame, 0)
+        self.end_frame = max(self.start_frame + 1, self.end_frame)
+        self.subtitle.start = timedelta(seconds=self.start_frame / self.fps)
+        self.subtitle.end = timedelta(seconds=self.end_frame / self.fps)
 
-    def adjust_end(self, timedelta):
-        self.subtitle.end += timedelta
-        if self.subtitle.end < ONE_FRAME:
-            self.subtitle.end = ONE_FRAME
-        if self.subtitle.start >= self.subtitle.end:
-            self.subtitle.start = self.subtitle.end - ONE_FRAME
+    def set_end(self, frame):
+        self.end_frame = max(frame, 1)
+        self.start_frame = min(self.start_frame, self.end_frame - 1)
+        self.subtitle.start = timedelta(seconds=self.start_frame / self.fps)
+        self.subtitle.end = timedelta(seconds=self.end_frame / self.fps)
 
-    def set_start(self, timedelta):
-        self.subtitle.start = timedelta
+    def get_start(self):
+        return self.start_frame
 
-    def set_end(self, timedelta):
-        self.subtitle.end = timedelta
-
-    def get_timestamps(self):
-        return self.subtitle.start, self.subtitle.end
+    def get_end(self):
+        return self.end_frame
 
 
 class SubtitlePad:
-    def __init__(self, subtitles, window_start_line, window_end_line, ncols):
-        self.ncols = ncols
+    def __init__(self, subtitles, window_start_line, window_end_line, ncols, fps):
         self.wrapper = TextWrapper(width=ncols)
-        self.subtitles = [SubtitleEntry(s, self.wrapper) for s in subtitles]
+        self.subtitles = [SubtitleEntry(s, self.wrapper, fps) for s in subtitles]
         self.index = 0
         self.selected_timestamp = "start"
 
@@ -87,11 +92,14 @@ class SubtitlePad:
         self.displayed_lines = window_end_line - window_start_line
         self.start_line = 0
         self.end_line = self.displayed_lines
+        self.ncols = ncols
+
+        self.fps = fps
 
         self.should_render = True
 
         self.pad = None
-        self.playback_timestamp = None
+        self.playback_frame = None
 
     def init_pad(self):
         # Separate function to initialize the curses pad, to simplify testing.
@@ -116,22 +124,23 @@ class SubtitlePad:
 
         # Redraw all subtitles
         start_line = 0
-        for i, subtitle in enumerate(self.subtitles):
+        for index, subtitle in enumerate(self.subtitles):
             # Only dim by default if we're in playback mode
-            dim = self.playback_timestamp is not None
-            if i == self.index and self.playback_timestamp is not None:
-                start_ts, end_ts = subtitle.get_timestamps()
+            dim = self.playback_frame is not None
+            if index == self.index and self.playback_frame is not None:
+                start_frame = subtitle.get_start()
+                end_frame = subtitle.get_end()
 
                 # Treat unset as "infinitely" large so that it feels more
                 # natural during playback of lyrics
-                if end_ts == UNSET_TIME:
-                    end_ts = timedelta.max
+                if end_frame == UNSET_TIME:
+                    end_frame = timedelta.max
 
                 # Make the selected timestamp dim if it's not in-bounds.
-                dim = not (start_ts <= self.playback_timestamp <= end_ts)
+                dim = not (start_frame <= self.playback_frame <= end_frame)
             subtitle.render(
                 self.pad,
-                i == self.index,
+                index == self.index,
                 self.selected_timestamp,
                 start_line,
                 dim=dim,
@@ -142,7 +151,7 @@ class SubtitlePad:
             sum(s.nlines() for s in self.subtitles[: self.index]) + self.index
         )
         selected_end = selected_start + self.subtitles[self.index].nlines()
-        if self.playback_timestamp is not None:
+        if self.playback_frame is not None:
             # In playback mode, always display the selected subtitle at the top
             self.start_line = selected_start
             self.end_line = self.start_line + self.displayed_lines
@@ -184,55 +193,50 @@ class SubtitlePad:
         self.selected_timestamp = "start" if self.selected_timestamp == "end" else "end"
         self.should_render = True
 
-    def adjust_timestamp(self, timedelta):
-        subtitle = self.subtitles[self.index]
+    def get_selected_subtitle(self):
+        return self.subtitles[self.index]
+
+    def set_frame(self, frame, progress=False):
+        subtitle = self.get_selected_subtitle()
         if self.selected_timestamp == "start":
-            subtitle.adjust_start(timedelta)
+            subtitle.set_start(frame)
         else:
-            subtitle.adjust_end(timedelta)
+            subtitle.set_end(frame)
+
         self.should_render = True
 
-    def set_timestamp(self, timedelta):
-        subtitle = self.subtitles[self.index]
+    def get_frame(self):
+        subtitle = self.get_selected_subtitle()
         if self.selected_timestamp == "start":
-            subtitle.set_start(timedelta)
-        else:
-            subtitle.set_end(timedelta)
-        self.should_render = True
+            return subtitle.get_start()
+        return subtitle.get_end()
 
-    def get_timestamps(self, index=None):
-        if index is None:
-            index = self.index
-        subtitle = self.subtitles[index]
-        return subtitle.get_timestamps()
+    def set_playback_frame(self, frame):
+        self.playback_frame = frame
 
-    def playback_set_frame(self, frame_num):
-        self.set_timestamp(frame_num * ONE_FRAME)
-        if self.selected_timestamp == "start":
-            self.selected_timestamp = "end"
+        new_index = self.index
+
+        # Setting playback_frame to None means playback mode is ended
+        if frame is not None:
+            for index, subtitle in enumerate(self.subtitles):
+                start_frame = subtitle.get_start()
+                # treat unset end as infinite so that it feels more natural during
+                # playback of lyrics
+                end_frame = subtitle.get_end()
+                if end_frame == UNSET_FRAME:
+                    end_frame = math.inf
+
+                # Select the first index that contains the frame
+                if start_frame <= frame <= end_frame:
+                    new_index = index
+                    break
+
+                # Or select the first subtitle that starts after the frame
+                if start_frame > frame:
+                    new_index = index
+                    break
+
+        if new_index != self.index and new_index < len(self.subtitles) - 1:
             self.should_render = True
-        elif self.index < len(self.subtitles) - 1:
             self.selected_timestamp = "start"
-            self.index += 1
-            self.should_render = True
-
-    def playback_set_timestamp(self, timestamp):
-        if timestamp is None and self.playback_timestamp is None:
-            return
-
-        if timestamp is None or self.playback_timestamp is None:
-            self.should_render = True
-            self.playback_timestamp = timestamp
-            return
-
-        start_ts, end_ts = self.get_timestamps()
-
-        # Treat unset as "infinitely" large so that it feels more
-        # natural during playback of lyrics
-        if end_ts == UNSET_TIME:
-            end_ts = timedelta.max
-        old_in_bounds = start_ts <= self.playback_timestamp <= end_ts
-        new_in_bounds = start_ts <= timestamp <= end_ts
-        if old_in_bounds != new_in_bounds:
-            self.should_render = True
-        self.playback_timestamp = timestamp
+            self.index = new_index

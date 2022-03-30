@@ -7,7 +7,7 @@ import click
 import srt
 
 from .colors import Pairs, setup_colors
-from .constants import ONE_FRAME, ONE_SECOND, UNSET_TIME
+from .constants import UNSET_TIME
 from .subtitles.srt import SubtitlePad
 from .video import Video
 
@@ -60,31 +60,23 @@ TOGGLE_COMMANDS = frozenset(
 )
 
 
-def handle_navigation_cmd(cmd, subtitle_pad, video=None):
-    set_timestamps = False
+def handle_navigation_cmd(cmd, subtitle_pad, video):
     if cmd == "KEY_UP":
         subtitle_pad.previous()
-        set_timestamps = True
     elif cmd == "KEY_DOWN":
         subtitle_pad.next()
-        set_timestamps = True
     elif cmd in TOGGLE_COMMANDS:
         subtitle_pad.toggle_selected_timestamp()
     elif cmd == "=":
-        subtitle_pad.adjust_timestamp(ONE_FRAME)
-        set_timestamps = True
+        subtitle_pad.set_frame(subtitle_pad.get_frame() + 1)
     elif cmd == "+":
-        subtitle_pad.adjust_timestamp(ONE_SECOND)
-        set_timestamps = True
+        subtitle_pad.set_frame(subtitle_pad.get_frame() + math.floor(subtitle_pad.fps))
     elif cmd == "-":
-        subtitle_pad.adjust_timestamp(-1 * ONE_FRAME)
-        set_timestamps = True
+        subtitle_pad.set_frame(subtitle_pad.get_frame() - 1)
     elif cmd == "_":
-        subtitle_pad.adjust_timestamp(-1 * ONE_SECOND)
-        set_timestamps = True
+        subtitle_pad.set_frame(subtitle_pad.get_frame() - math.floor(subtitle_pad.fps))
 
-    if video and set_timestamps:
-        video.set_timestamps(subtitle_pad.get_timestamps())
+    video.display_frame(subtitle_pad.get_frame())
 
 
 def display_help(stdscr, video, subtitle_pad, help_text):
@@ -103,7 +95,7 @@ def display_help(stdscr, video, subtitle_pad, help_text):
     stdscr.noutrefresh()
 
 
-def run_playback_mode(stdscr, video, subtitle_pad):
+def run_playback_mode(stdscr, video, subtitle_pad, start_frame, end_frame):
     stdscr.nodelay(True)
     status_bar = (
         PLAYBACK_STATUS_BAR
@@ -119,26 +111,17 @@ def run_playback_mode(stdscr, video, subtitle_pad):
 
     cmd = ""
     frame_delta = 1 / video.fps
-    for frame_num in video.play():
+    for frame_num in video.play(start_frame, end_frame):
         # Maintain framerate
         t0 = time.process_time()
 
-        # Auto-progress to the next subtitle if we're past the end of
-        # the current subtitle & the current end_ts is not unset
-        _, end_ts = subtitle_pad.get_timestamps()
         current_ts = timedelta(seconds=frame_num / video.fps)
-        if end_ts != UNSET_TIME and current_ts > end_ts and subtitle_pad.has_next():
-            subtitle_pad.next()
-            if subtitle_pad.selected_timestamp == "end":
-                subtitle_pad.toggle_selected_timestamp()
-        subtitle_pad.playback_set_timestamp(current_ts)
-
         stdscr.addstr(
             1,
             0,
             srt.timedelta_to_srt_timestamp(current_ts),
         )
-
+        subtitle_pad.set_playback_frame(frame_num)
         subtitle_pad.render()
         curses.doupdate()
         try:
@@ -151,7 +134,7 @@ def run_playback_mode(stdscr, video, subtitle_pad):
             display_help(stdscr, video, subtitle_pad, EDITOR_HELP)
             stdscr.nodelay(True)
         elif cmd == " ":
-            subtitle_pad.playback_set_frame(frame_num)
+            subtitle_pad.set_playback_frame(frame_num)
         elif cmd in TOGGLE_COMMANDS:
             # Allow toggling so that users can move on from a start
             # timestamp without setting it.
@@ -167,8 +150,8 @@ def run_playback_mode(stdscr, video, subtitle_pad):
             time.sleep(remaining)
 
     stdscr.nodelay(False)
-    video.set_timestamps(subtitle_pad.get_timestamps())
-    subtitle_pad.playback_set_timestamp(None)
+    video.set_current_frame(subtitle_pad.get_frame())
+    subtitle_pad.set_playback_frame(None)
 
     stdscr.addstr(
         1,
@@ -193,10 +176,12 @@ def run_editor(stdscr, subtitles, video_path):
     setup_colors()
 
     video = Video(video_path)
-    subtitle_pad = SubtitlePad(subtitles, 2, curses.LINES - 2, curses.COLS)
+    subtitle_pad = SubtitlePad(
+        subtitles, 2, curses.LINES - 2, curses.COLS, fps=video.fps
+    )
     subtitle_pad.init_pad()
 
-    video.set_timestamps(subtitle_pad.get_timestamps())
+    video.set_current_frame(subtitle_pad.get_frame())
 
     cmd = None
 
@@ -222,15 +207,25 @@ def run_editor(stdscr, subtitles, video_path):
             display_help(stdscr, video, subtitle_pad, EDITOR_HELP)
         elif cmd == "p":
             # Play just the video behind the current subtitle
-            video.set_timestamps(subtitle_pad.get_timestamps())
-            run_playback_mode(stdscr, video, subtitle_pad)
+            subtitle = subtitle_pad.get_selected_subtitle()
+            run_playback_mode(
+                stdscr,
+                video,
+                subtitle_pad,
+                start_frame=subtitle.get_start(),
+                end_frame=subtitle.get_end(),
+            )
         elif cmd == "P":
             # Start at the current subtitle and continue to the
             # end of the video
-            start_ts, _ = subtitle_pad.get_timestamps()
-            start_frame_num = math.floor(start_ts.total_seconds() * video.fps)
-            video.set_frames(start_frame_num, video.frame_count - 1)
-            run_playback_mode(stdscr, video, subtitle_pad)
+            subtitle = subtitle_pad.get_selected_subtitle()
+            run_playback_mode(
+                stdscr,
+                video,
+                subtitle_pad,
+                start_frame=subtitle.get_start(),
+                end_frame=video.frame_count - 1,
+            )
 
 
 @click.command()
