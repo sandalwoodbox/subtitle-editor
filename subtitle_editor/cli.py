@@ -1,5 +1,6 @@
 import curses
 import math
+import time
 from datetime import timedelta
 
 import click
@@ -8,7 +9,7 @@ import srt
 from .colors import Pairs, setup_colors
 from .constants import ONE_FRAME, ONE_SECOND, UNSET_TIME
 from .subtitles.srt import SubtitlePad
-from .video import VideoWindow
+from .video import Video
 
 EDITOR_HELP = """
 NAVIGATION
@@ -59,7 +60,7 @@ TOGGLE_COMMANDS = frozenset(
 )
 
 
-def handle_navigation_cmd(cmd, subtitle_pad, video_window=None):
+def handle_navigation_cmd(cmd, subtitle_pad, video=None):
     set_timestamps = False
     if cmd == "KEY_UP":
         subtitle_pad.previous()
@@ -82,11 +83,11 @@ def handle_navigation_cmd(cmd, subtitle_pad, video_window=None):
         subtitle_pad.adjust_timestamp(-1 * ONE_SECOND)
         set_timestamps = True
 
-    if video_window and set_timestamps:
-        video_window.set_timestamps(subtitle_pad.get_timestamps())
+    if video and set_timestamps:
+        video.set_timestamps(subtitle_pad.get_timestamps())
 
 
-def display_help(stdscr, video_window, subtitle_pad, help_text):
+def display_help(stdscr, video, subtitle_pad, help_text):
     stdscr.erase()
     stdscr.addstr(0, 0, EDITOR_HELP)
     stdscr.addstr(
@@ -98,11 +99,11 @@ def display_help(stdscr, video_window, subtitle_pad, help_text):
     stdscr.getkey()
     stdscr.erase()
     subtitle_pad.should_render = True
-    video_window.should_render = True
+    video.should_render = True
     stdscr.noutrefresh()
 
 
-def run_playback_mode(stdscr, video_window, subtitle_pad):
+def run_playback_mode(stdscr, video, subtitle_pad):
     stdscr.nodelay(True)
     status_bar = (
         PLAYBACK_STATUS_BAR
@@ -117,11 +118,15 @@ def run_playback_mode(stdscr, video_window, subtitle_pad):
     )
 
     cmd = ""
-    for frame_num in video_window.play():
+    frame_delta = 1 / video.fps
+    for frame_num in video.play():
+        # Maintain framerate
+        t0 = time.process_time()
+
         # Auto-progress to the next subtitle if we're past the end of
         # the current subtitle & the current end_ts is not unset
         _, end_ts = subtitle_pad.get_timestamps()
-        current_ts = timedelta(seconds=frame_num / video_window.fps)
+        current_ts = timedelta(seconds=frame_num / video.fps)
         if end_ts != UNSET_TIME and current_ts > end_ts and subtitle_pad.has_next():
             subtitle_pad.next()
             if subtitle_pad.selected_timestamp == "end":
@@ -129,7 +134,7 @@ def run_playback_mode(stdscr, video_window, subtitle_pad):
         subtitle_pad.playback_set_timestamp(current_ts)
 
         stdscr.addstr(
-            video_window.video_height + 1,
+            1,
             0,
             srt.timedelta_to_srt_timestamp(current_ts),
         )
@@ -143,7 +148,7 @@ def run_playback_mode(stdscr, video_window, subtitle_pad):
 
         if cmd == "?":
             stdscr.nodelay(False)
-            display_help(stdscr, video_window, subtitle_pad, EDITOR_HELP)
+            display_help(stdscr, video, subtitle_pad, EDITOR_HELP)
             stdscr.nodelay(True)
         elif cmd == " ":
             subtitle_pad.playback_set_frame(frame_num)
@@ -154,18 +159,25 @@ def run_playback_mode(stdscr, video_window, subtitle_pad):
         elif cmd in ("P", "p", "q"):
             break
 
+        # Each loop should be no shorter than a frame.
+        t1 = time.process_time()
+        remaining = frame_delta - (t1 - t0)
+
+        if remaining > 0:
+            time.sleep(remaining)
+
     stdscr.nodelay(False)
-    video_window.set_timestamps(subtitle_pad.get_timestamps())
+    video.set_timestamps(subtitle_pad.get_timestamps())
     subtitle_pad.playback_set_timestamp(None)
 
     stdscr.addstr(
-        video_window.video_height + 1,
+        1,
         0,
         " " * curses.COLS,
     )
 
 
-def run_editor(stdscr, subtitles, video):
+def run_editor(stdscr, subtitles, video_path):
     curses.curs_set(0)
     min_cols = 1 + max(
         len(STANDARD_STATUS_BAR_SHORT),
@@ -180,14 +192,11 @@ def run_editor(stdscr, subtitles, video):
     # Set up ANSI colors
     setup_colors()
 
-    video_window = VideoWindow(video)
-    video_window.load_frames()
-    subtitle_pad = SubtitlePad(
-        subtitles, video_window.video_height + 2, curses.LINES - 2, curses.COLS
-    )
+    video = Video(video_path)
+    subtitle_pad = SubtitlePad(subtitles, 2, curses.LINES - 2, curses.COLS)
     subtitle_pad.init_pad()
 
-    video_window.set_timestamps(subtitle_pad.get_timestamps())
+    video.set_timestamps(subtitle_pad.get_timestamps())
 
     cmd = None
 
@@ -205,24 +214,23 @@ def run_editor(stdscr, subtitles, video):
         )
         stdscr.noutrefresh()
         subtitle_pad.render()
-        video_window.render()
         curses.doupdate()
         cmd = stdscr.getkey()
         if cmd in NAVIGATION_COMMANDS:
-            handle_navigation_cmd(cmd, subtitle_pad, video_window=video_window)
+            handle_navigation_cmd(cmd, subtitle_pad, video)
         elif cmd == "?":
-            display_help(stdscr, video_window, subtitle_pad, EDITOR_HELP)
+            display_help(stdscr, video, subtitle_pad, EDITOR_HELP)
         elif cmd == "p":
             # Play just the video behind the current subtitle
-            video_window.set_timestamps(subtitle_pad.get_timestamps())
-            run_playback_mode(stdscr, video_window, subtitle_pad)
+            video.set_timestamps(subtitle_pad.get_timestamps())
+            run_playback_mode(stdscr, video, subtitle_pad)
         elif cmd == "P":
             # Start at the current subtitle and continue to the
             # end of the video
             start_ts, _ = subtitle_pad.get_timestamps()
-            start_frame_num = math.floor(start_ts.total_seconds() * video_window.fps)
-            video_window.set_frames(start_frame_num, video_window.frame_count - 1)
-            run_playback_mode(stdscr, video_window, subtitle_pad)
+            start_frame_num = math.floor(start_ts.total_seconds() * video.fps)
+            video.set_frames(start_frame_num, video.frame_count - 1)
+            run_playback_mode(stdscr, video, subtitle_pad)
 
 
 @click.command()

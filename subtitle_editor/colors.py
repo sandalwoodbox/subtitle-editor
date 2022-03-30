@@ -1,8 +1,6 @@
 import curses
 import enum
 
-from video_to_ascii.render_strategy.image_processor import rgb_to_ansi
-
 
 class Pairs(enum.IntEnum):
     # We've made odd numbers above 232 available for custom color pairs
@@ -280,15 +278,6 @@ def _to_curses(color):
     return color * 1000 // 255
 
 
-def rgb_to_color_pair(r, g, b):
-    ansi = rgb_to_ansi(r, g, b)
-
-    # "Remove" half the greyscale colors to make room for custom statuses
-    if ansi > 231:
-        ansi = ansi // 2 * 2
-    return ansi
-
-
 def setup_colors():
     curses.use_default_colors()
     for i, (r, g, b) in enumerate(COLORS):
@@ -298,7 +287,6 @@ def setup_colors():
         curses.init_color(i, _to_curses(r), _to_curses(g), _to_curses(b))
         curses.init_pair(i, i, -1)
 
-    # We've made odd numbers above 232 available for custom color pairs
-    # without disrupting video coloring
+    # Use odd numbers above 232 available for custom color pairs
     curses.init_pair(Pairs.STATUS, 15, 12)
     curses.init_pair(Pairs.DIM_STANDOUT, 232, Pairs.DIM)

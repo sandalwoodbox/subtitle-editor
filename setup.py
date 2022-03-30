@@ -27,7 +27,6 @@ REQUIRED = [
     "opencv-python",
     "pyaudio",
     "srt",
-    "video-to-ascii",
 ]
 
 # What packages are optional?
